@@ -1,0 +1,758 @@
+{
+  "users": [
+    {
+      "id": 1,
+      "username": "Admin",
+      "password": "007",
+      "role": "admin",
+      "enabled": true
+    },
+    {
+      "id": 2,
+      "username": "renju",
+      "password": "renjuroshan",
+      "role": "user",
+      "enabled": true
+    }
+  ],
+  "ledgers": [
+    {
+      "id": 1770333148772,
+      "name": "NISSAN MAXIMA",
+      "enabled": true,
+      "groupId": 3,
+      "balance": 461,
+      "openingBalance": 0
+    },
+    {
+      "id": 1770368361171,
+      "name": "RAJESH",
+      "groupId": 4,
+      "enabled": true,
+      "balance": 100,
+      "openingBalance": 0
+    },
+    {
+      "id": 1770368832090,
+      "name": "BASIL PERSONAL",
+      "groupId": 4,
+      "enabled": true,
+      "balance": 157.007,
+      "openingBalance": 0
+    },
+    {
+      "id": 1770368877208,
+      "name": "WILL TEC OFFICE",
+      "groupId": 4,
+      "enabled": true,
+      "balance": -7.800000000000006,
+      "openingBalance": 0
+    },
+    {
+      "id": 1770368893569,
+      "name": "WILL TEC SHOWROOM",
+      "groupId": 4,
+      "enabled": true,
+      "balance": 286.421,
+      "openingBalance": 0
+    },
+    {
+      "id": 1770368918610,
+      "name": "DHANESH",
+      "groupId": 4,
+      "enabled": true,
+      "balance": -300,
+      "openingBalance": 0
+    },
+    {
+      "id": 1770368935449,
+      "name": "SUBIN",
+      "groupId": 4,
+      "enabled": true,
+      "balance": -3000,
+      "openingBalance": 0
+    },
+    {
+      "id": 1770368986138,
+      "name": "CHITTY",
+      "groupId": 4,
+      "enabled": true,
+      "balance": -300,
+      "openingBalance": 0
+    },
+    {
+      "id": 1770369003423,
+      "name": "BASIL CHITTY",
+      "groupId": 4,
+      "enabled": true,
+      "balance": -207.5,
+      "openingBalance": 0
+    },
+    {
+      "id": 1770369033857,
+      "name": "LEMON BAKKALA",
+      "groupId": 4,
+      "enabled": true,
+      "balance": -117.849,
+      "openingBalance": 0
+    },
+    {
+      "id": 1770369074762,
+      "name": "SHOW ROOM HARNESS SHIPPING",
+      "groupId": 4,
+      "enabled": true,
+      "balance": -147.602,
+      "openingBalance": 0
+    },
+    {
+      "id": 1770369106926,
+      "name": "SALON BALANCE",
+      "groupId": 4,
+      "enabled": true,
+      "balance": -321.002,
+      "openingBalance": 0
+    },
+    {
+      "id": 1770369130767,
+      "name": "TIETH",
+      "groupId": 1770378697001,
+      "enabled": true,
+      "balance": -6.33,
+      "openingBalance": 0
+    },
+    {
+      "id": 1770369157150,
+      "name": "SHIBU EXTRA SALON",
+      "groupId": 4,
+      "enabled": true,
+      "balance": -10.125,
+      "openingBalance": 0
+    },
+    {
+      "id": 1770370519727,
+      "name": "PERSONAL EXPENSE",
+      "groupId": 2,
+      "enabled": true,
+      "balance": 0,
+      "openingBalance": 0
+    },
+    {
+      "id": 1770370544422,
+      "name": "PERSONAL INCOME",
+      "groupId": 1,
+      "enabled": true,
+      "balance": 0,
+      "openingBalance": 0
+    },
+    {
+      "id": 1770371234860,
+      "name": "ROJI",
+      "groupId": 4,
+      "balance": 161.5,
+      "enabled": true,
+      "openingBalance": 0
+    },
+    {
+      "id": 1770494403174,
+      "name": "Chandy personal",
+      "groupId": 4,
+      "openingBalance": 0,
+      "balance": -12.5,
+      "enabled": true
+    },
+    {
+      "id": 1770494671198,
+      "name": "SHIBU PERSONAL",
+      "groupId": 4,
+      "openingBalance": 0,
+      "balance": 110,
+      "enabled": true
+    }
+  ],
+  "accounts": [
+    {
+      "id": 1,
+      "name": "KFH",
+      "balance": 154.514,
+      "enabled": true,
+      "openingBalance": 264.514
+    },
+    {
+      "id": 2,
+      "name": "NBK",
+      "balance": 748.435,
+      "enabled": true,
+      "openingBalance": 748.435
+    },
+    {
+      "id": 3,
+      "name": "CBK SALARY ACCOUNT",
+      "balance": 160.132,
+      "enabled": true,
+      "openingBalance": 417.132
+    },
+    {
+      "id": 4,
+      "name": "Cash in Hand",
+      "balance": 1974.1,
+      "enabled": true,
+      "openingBalance": -1515.505
+    },
+    {
+      "id": 1770333083834,
+      "name": "NBK SALON",
+      "balance": 0,
+      "enabled": true,
+      "openingBalance": 0
+    },
+    {
+      "id": 1770333102182,
+      "name": "GULF BANK",
+      "balance": 602.588,
+      "enabled": true,
+      "openingBalance": 602.588
+    },
+    {
+      "id": 1770371102481,
+      "name": "NBK COMPANY",
+      "balance": 290,
+      "enabled": true,
+      "openingBalance": 290
+    }
+  ],
+  "transactions": [
+    {
+      "type": "expense",
+      "amount": 7,
+      "accountId": "4",
+      "ledgerId": "1770370519727",
+      "toId": "",
+      "date": "2026-02-07",
+      "remark": "Day fresh",
+      "userName": "Admin",
+      "id": 1770495413911
+    },
+    {
+      "type": "expense",
+      "amount": 5.1,
+      "accountId": "4",
+      "ledgerId": "1770368877208",
+      "toId": "",
+      "date": "2026-02-07",
+      "remark": "Petrol",
+      "userName": "Admin",
+      "id": 1770495168002
+    },
+    {
+      "type": "expense",
+      "amount": 0.7,
+      "accountId": "4",
+      "ledgerId": "1770370519727",
+      "toId": "",
+      "date": "2026-02-07",
+      "remark": "Nipple for reaga ",
+      "userName": "Admin",
+      "id": 1770495101657
+    },
+    {
+      "type": "expense",
+      "amount": 10,
+      "accountId": "4",
+      "ledgerId": "1770370519727",
+      "toId": "",
+      "date": "2026-02-07",
+      "remark": "Aamys",
+      "userName": "Admin",
+      "id": 1770495079680
+    },
+    {
+      "type": "expense",
+      "amount": 3,
+      "accountId": "4",
+      "ledgerId": "1770369106926",
+      "toId": "",
+      "date": "2026-02-07",
+      "remark": "Water",
+      "userName": "Admin",
+      "id": 1770495048536
+    },
+    {
+      "type": "income",
+      "amount": 61.5,
+      "accountId": "4",
+      "ledgerId": "1770369106926",
+      "toId": "",
+      "date": "2026-02-07",
+      "remark": "7th collection",
+      "userName": "Admin",
+      "id": 1770495016120
+    },
+    {
+      "type": "income",
+      "amount": 11,
+      "accountId": "4",
+      "ledgerId": "1770369106926",
+      "toId": "",
+      "date": "2026-02-07",
+      "remark": "6th balance",
+      "userName": "Admin",
+      "id": 1770494966671
+    },
+    {
+      "type": "expense",
+      "amount": 50,
+      "accountId": "3",
+      "ledgerId": "1770368877208",
+      "toId": "",
+      "date": "2026-02-07",
+      "remark": "Dhanesh purchase",
+      "userName": "Admin",
+      "id": 1770494898465
+    },
+    {
+      "type": "expense",
+      "amount": 110,
+      "accountId": "1",
+      "ledgerId": "1770494671198",
+      "toId": "",
+      "date": "2026-02-07",
+      "remark": "Personal",
+      "userName": "Admin",
+      "id": 1770494797361
+    },
+    {
+      "type": "expense",
+      "amount": 100,
+      "accountId": "4",
+      "ledgerId": "1770368832090",
+      "toId": "",
+      "date": "2026-02-07",
+      "remark": "Basil till 10th rolling",
+      "userName": "Admin",
+      "id": 1770494546914
+    },
+    {
+      "type": "income",
+      "amount": 12.5,
+      "accountId": "4",
+      "ledgerId": "1770494403174",
+      "toId": "",
+      "date": "2026-02-07",
+      "remark": "Basil int",
+      "userName": "Admin",
+      "id": 1770494473241
+    },
+    {
+      "type": "income",
+      "amount": 12.5,
+      "accountId": "4",
+      "ledgerId": "1770370544422",
+      "toId": "",
+      "date": "2026-02-07",
+      "remark": "Basil int",
+      "userName": "Admin",
+      "id": 1770494359479
+    },
+    {
+      "type": "expense",
+      "amount": 80,
+      "accountId": "3",
+      "ledgerId": "1770368877208",
+      "toId": "",
+      "date": "2026-02-06",
+      "remark": "Pick up painting",
+      "userName": "Admin",
+      "id": 1770447770562
+    },
+    {
+      "type": "expense",
+      "amount": 7,
+      "accountId": "3",
+      "ledgerId": "1770368877208",
+      "toId": "",
+      "date": "2026-02-06",
+      "remark": "Roji license",
+      "userName": "Admin",
+      "id": 1770447106933
+    },
+    {
+      "type": "expense",
+      "amount": 11.5,
+      "accountId": "4",
+      "ledgerId": "1770371234860",
+      "toId": "",
+      "date": "2026-02-06",
+      "remark": "Company money",
+      "userName": "Admin",
+      "id": 1770445393508
+    },
+    {
+      "type": "income",
+      "amount": 11.5,
+      "accountId": "4",
+      "ledgerId": "1770368877208",
+      "toId": "1770371234860",
+      "date": "2026-02-06",
+      "remark": "With roji",
+      "userName": "Admin",
+      "id": 1770445333321
+    },
+    {
+      "type": "expense",
+      "amount": 12.9,
+      "accountId": "4",
+      "ledgerId": "1770370519727",
+      "toId": "",
+      "date": "2026-02-06",
+      "remark": "Lulu",
+      "userName": "Admin",
+      "id": 1770445080818
+    },
+    {
+      "type": "expense",
+      "amount": 14.7,
+      "accountId": "4",
+      "ledgerId": "1770370519727",
+      "toId": "",
+      "date": "2026-02-06",
+      "remark": "Reagan’s birhday candle & cake & choclate",
+      "userName": "Admin",
+      "id": 1770402504953
+    },
+    {
+      "type": "income",
+      "amount": 0.125,
+      "accountId": "4",
+      "ledgerId": "1770369157150",
+      "toId": "",
+      "date": "2026-02-06",
+      "remark": "Extra salon",
+      "userName": "Admin",
+      "id": 1770402360685
+    },
+    {
+      "type": "income",
+      "amount": 0.125,
+      "accountId": "4",
+      "ledgerId": "1770370544422",
+      "toId": "",
+      "date": "2026-02-06",
+      "remark": "Extra salon 6th",
+      "userName": "Admin",
+      "id": 1770402303472
+    },
+    {
+      "type": "expense",
+      "amount": 8,
+      "accountId": "4",
+      "ledgerId": "1770369106926",
+      "toId": "",
+      "date": "2026-02-06",
+      "remark": "Tissue",
+      "userName": "Admin",
+      "id": 1770402244456
+    },
+    {
+      "type": "income",
+      "amount": 93,
+      "accountId": "4",
+      "ledgerId": "1770369106926",
+      "toId": "",
+      "date": "2026-02-06",
+      "remark": "Today collection",
+      "userName": "Admin",
+      "id": 1770402205016
+    },
+    {
+      "type": "income",
+      "amount": 19.75,
+      "accountId": "4",
+      "ledgerId": "1770369106926",
+      "toId": "",
+      "date": "2026-02-06",
+      "remark": "05th balance",
+      "userName": "Admin",
+      "id": 1770402151052
+    },
+    {
+      "type": "income",
+      "amount": 0.5,
+      "accountId": "4",
+      "ledgerId": "1770370544422",
+      "toId": "",
+      "date": "2026-02-05",
+      "remark": "Tallying",
+      "userName": "Admin",
+      "id": 1770393288123
+    },
+    {
+      "type": "expense",
+      "amount": 150,
+      "accountId": "4",
+      "ledgerId": "1770371234860",
+      "toId": "",
+      "date": "2026-02-05",
+      "remark": "20:20 chity amount",
+      "userName": "Admin",
+      "id": 1770392994765
+    },
+    {
+      "type": "income",
+      "amount": 97.5,
+      "accountId": "4",
+      "ledgerId": "1770369106926",
+      "toId": "",
+      "date": "2026-02-05",
+      "remark": "Salon collection 4th bal and today",
+      "userName": "Admin",
+      "id": 1770392883066
+    },
+    {
+      "type": "contra",
+      "amount": 120,
+      "accountId": "3",
+      "ledgerId": "",
+      "toId": "4",
+      "date": "2026-02-05",
+      "remark": "Cash from bank vinu",
+      "userName": "Admin",
+      "id": 1770392590351
+    },
+    {
+      "type": "income",
+      "amount": 20,
+      "accountId": "4",
+      "ledgerId": "1770371234860",
+      "toId": "",
+      "date": "2026-02-05",
+      "remark": "Chitty returned",
+      "userName": "Admin",
+      "id": 1770392463518
+    },
+    {
+      "type": "income",
+      "amount": 369,
+      "accountId": "4",
+      "ledgerId": "1770368877208",
+      "toId": "",
+      "date": "2026-02-05",
+      "remark": "Ali abdul wahab",
+      "userName": "Admin",
+      "id": 1770392385760
+    },
+    {
+      "type": "expense",
+      "amount": 100,
+      "accountId": "4",
+      "ledgerId": "1770368361171",
+      "toId": "",
+      "date": "2026-02-05",
+      "remark": "Personal",
+      "userName": "Admin",
+      "id": 1770392346617
+    },
+    {
+      "type": "income",
+      "amount": 6.33,
+      "accountId": "4",
+      "ledgerId": "1770369130767",
+      "toId": "",
+      "date": "2026-02-06",
+      "remark": "",
+      "userName": "Admin",
+      "id": 1770378852672
+    },
+    {
+      "type": "expense",
+      "amount": 461,
+      "accountId": "4",
+      "ledgerId": "1770333148772",
+      "toId": "2",
+      "date": "2026-02-05",
+      "remark": "ASSET",
+      "userName": "Admin",
+      "id": 1770377333526
+    },
+    {
+      "type": "income",
+      "amount": 10,
+      "accountId": "4",
+      "ledgerId": "1770369157150",
+      "toId": "",
+      "date": "2026-02-05",
+      "remark": "SALON JAN",
+      "userName": "Admin",
+      "id": 1770376894864
+    },
+    {
+      "type": "expense",
+      "amount": 0.338,
+      "accountId": "4",
+      "ledgerId": "1770369106926",
+      "toId": "",
+      "date": "2026-02-05",
+      "remark": "BALANCE AFTER PAYING ELECTRICITY TILL 4TH",
+      "userName": "Admin",
+      "id": 1770376539433
+    },
+    {
+      "type": "income",
+      "amount": 49.59,
+      "accountId": "4",
+      "ledgerId": "1770369106926",
+      "toId": "",
+      "date": "2026-02-05",
+      "remark": "PENDING JANUARY",
+      "userName": "Admin",
+      "id": 1770376478590
+    },
+    {
+      "type": "income",
+      "amount": 147.602,
+      "accountId": "4",
+      "ledgerId": "1770369074762",
+      "toId": "",
+      "date": "2026-02-05",
+      "remark": "SHOWROOOM HARNESS SHIPPING",
+      "userName": "Admin",
+      "id": 1770376418811
+    },
+    {
+      "type": "income",
+      "amount": 117.849,
+      "accountId": "4",
+      "ledgerId": "1770369033857",
+      "toId": "",
+      "date": "2026-02-05",
+      "remark": "till 05th",
+      "userName": "Admin",
+      "id": 1770376369492
+    },
+    {
+      "type": "income",
+      "amount": 207.5,
+      "accountId": "4",
+      "ledgerId": "1770369003423",
+      "toId": "",
+      "date": "2026-02-05",
+      "remark": "chitty bal till feb 1 st",
+      "userName": "Admin",
+      "id": 1770376312811
+    },
+    {
+      "type": "income",
+      "amount": 300,
+      "accountId": "4",
+      "ledgerId": "1770368986138",
+      "toId": "",
+      "date": "2026-02-05",
+      "remark": "pending chitty robin",
+      "userName": "Admin",
+      "id": 1770376229131
+    },
+    {
+      "type": "income",
+      "amount": 3000,
+      "accountId": "4",
+      "ledgerId": "1770368935449",
+      "toId": "2",
+      "date": "2026-02-05",
+      "remark": "TEMP ROLLING TILL 15 TH",
+      "userName": "Admin",
+      "id": 1770371516925
+    },
+    {
+      "type": "income",
+      "amount": 300,
+      "accountId": "4",
+      "ledgerId": "1770368918610",
+      "toId": "2",
+      "date": "2026-02-05",
+      "remark": "TEMP ROLLING TILL 9TH",
+      "userName": "Admin",
+      "id": 1770371494941
+    },
+    {
+      "type": "expense",
+      "amount": 286.421,
+      "accountId": "4",
+      "ledgerId": "1770368893569",
+      "toId": "",
+      "date": "2026-02-05",
+      "remark": "PAYMENTS FOR SUPPLIER OPENING BALANCE",
+      "userName": "Admin",
+      "id": 1770371474452
+    },
+    {
+      "type": "expense",
+      "amount": 230.6,
+      "accountId": "4",
+      "ledgerId": "1770368877208",
+      "toId": "2",
+      "date": "2026-02-05",
+      "remark": "OPENING BALANCE",
+      "userName": "Admin",
+      "id": 1770371384839
+    },
+    {
+      "type": "expense",
+      "amount": 57.007,
+      "accountId": "4",
+      "ledgerId": "1770368832090",
+      "toId": "",
+      "date": "2026-02-05",
+      "remark": "OPENING BALANCE",
+      "userName": "Admin",
+      "id": 1770371315408
+    },
+    {
+      "type": "expense",
+      "amount": 20,
+      "accountId": "4",
+      "ledgerId": "1770371234860",
+      "toId": "",
+      "date": "2026-02-05",
+      "remark": "CHITTY BAL",
+      "userName": "Admin",
+      "id": 1770371264833
+    }
+  ],
+  "auth": {
+    "currentUser": {
+      "id": 1,
+      "username": "Admin",
+      "password": "007",
+      "role": "admin",
+      "enabled": true
+    },
+    "rememberMe": true,
+    "biometricsEnabled": false
+  },
+  "ledgerGroups": [
+    {
+      "id": 1,
+      "name": "Indirect Income",
+      "enabled": true
+    },
+    {
+      "id": 2,
+      "name": "Indirect Expense",
+      "enabled": true
+    },
+    {
+      "id": 3,
+      "name": "Investments",
+      "enabled": true
+    },
+    {
+      "id": 4,
+      "name": "Temporary Cash",
+      "enabled": true
+    },
+    {
+      "id": 1770378697001,
+      "name": "PENDING PAYMENTS",
+      "enabled": true
+    }
+  ]
+}

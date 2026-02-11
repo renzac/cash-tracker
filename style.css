@@ -1,0 +1,146 @@
+:root {
+    --safe-area-top: env(safe-area-inset-top);
+    --safe-area-bottom: env(safe-area-inset-bottom);
+}
+
+.pt-safe {
+    padding-top: var(--safe-area-top);
+}
+
+@keyframes fade-in {
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+@keyframes shake {
+
+    0%,
+    100% {
+        transform: translateX(0);
+    }
+
+    25% {
+        transform: translateX(-5px);
+    }
+
+    75% {
+        transform: translateX(5px);
+    }
+}
+
+.animate-fade-in {
+    animation: fade-in 0.4s ease-out forwards;
+}
+
+.animate-shake {
+    animation: shake 0.2s ease-in-out 0s 2;
+}
+
+/* Glassmorphism Classes */
+.glass {
+    background: rgba(15, 23, 42, 0.7);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+/* Navigation Styling */
+.nav-link.active {
+    background-color: rgba(56, 189, 248, 0.1);
+    color: #38bdf8;
+    border-right: 3px solid #38bdf8;
+}
+
+.mobile-nav-link.active {
+    color: #38bdf8;
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+    width: 5px;
+}
+
+::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+    background: rgba(148, 163, 184, 0.2);
+    border-radius: 10px;
+}
+
+/* Input Tweaks for iPhone */
+input,
+select {
+    font-size: 16px !important;
+    /* Prevents auto-zoom on iOS */
+}
+
+/* Status Colors */
+.status-enabled {
+    background-color: rgba(16, 185, 129, 0.1);
+    color: #10b981;
+}
+
+.status-disabled {
+    background-color: rgba(244, 63, 94, 0.1);
+    color: #f43f5e;
+}
+
+/* Transaction Cards */
+.tx-card {
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.tx-card:active {
+    scale: 0.98;
+    background-color: rgba(30, 41, 59, 1);
+}
+
+/* PB Safe Padding */
+.pb-safe {
+    padding-bottom: var(--safe-area-bottom);
+}
+
+/* Layout context adjustments */
+main header {
+    z-index: 100;
+}
+
+#view-container {
+    mask-image: linear-gradient(to bottom, black 95%, transparent 100%);
+}
+
+.mono-select {
+    font-family: 'JetBrains Mono', 'Fira Code', 'Courier New', monospace !important;
+    font-variant-numeric: tabular-nums;
+    appearance: none;
+    -webkit-appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%2364748b'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'%3E%3C/path%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 1rem center;
+    background-size: 1.25rem;
+    padding-right: 2.5rem !important;
+}
+
+.mono-select option {
+    font-family: inherit;
+    background-color: #0f172a;
+}
+
+#global-search-btn {
+    -webkit-tap-highlight-color: transparent;
+    cursor: pointer;
+}
+
+#modal-container input {
+    font-size: 16px !important;
+    /* Force no-zoom on iOS */
+}
