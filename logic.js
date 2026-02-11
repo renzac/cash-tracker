@@ -77,7 +77,7 @@ const AppLogic = {
         document.getElementById('mobile-logout-btn')?.addEventListener('click', logoutHandler);
         document.getElementById('mobile-logout-nav')?.addEventListener('click', logoutHandler);
 
-        document.getElementById('fab-save').addEventListener('click', () => {
+        document.getElementById('fab-save')?.addEventListener('click', () => {
             document.getElementById('transaction-form').requestSubmit();
         });
 
