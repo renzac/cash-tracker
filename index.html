@@ -131,13 +131,13 @@
                         title="Search Ledgers & Accounts">
                         <i class="fas fa-search text-xl"></i>
                     </button>
-                    <span id="display-date" class="text-slate-400 text-sm hidden md:block"></span>
+                    <span id="display-date" class="text-slate-400 text-sm block"></span>
                     <button id="summary-btn"
                         class="hidden md:block bg-indigo-500/20 text-indigo-400 px-3 py-1.5 rounded-full text-xs md:text-sm font-semibold border border-indigo-500/30">
                         Summary
                     </button>
                     <button id="mobile-logout-btn"
-                        class="flex text-slate-400 hover:text-rose-500 transition-all p-3 -m-1">
+                        class="hidden text-slate-400 hover:text-rose-500 transition-all p-3 -m-1">
                         <i class="fas fa-sign-out-alt text-xl"></i>
                     </button>
                 </div>
@@ -343,7 +343,7 @@
 
             <!-- Bottom Nav (Mobile) -->
             <nav
-                class="lg:hidden fixed bottom-0 left-0 right-0 bg-slate-950/80 backdrop-blur-xl border-t border-slate-800 flex justify-around items-center h-20 px-4 pb-safe z-[2000]">
+                class="lg:hidden fixed bottom-0 left-0 right-0 bg-slate-950/80 backdrop-blur-xl border-t border-slate-800 flex justify-around items-center h-20 px-2 pb-safe z-[2000]">
                 <button data-view="transactions" class="mobile-nav-link active flex flex-col items-center space-y-1">
                     <i class="fas fa-exchange-alt text-lg"></i>
                     <span class="text-[9px] font-medium uppercase tracking-wider">Entries</span>
@@ -353,12 +353,6 @@
                     <i class="fas fa-search text-lg"></i>
                     <span class="text-[9px] font-medium uppercase tracking-wider">Search</span>
                 </button>
-                <div class="relative -top-8 px-1">
-                    <button id="fab-save"
-                        class="w-14 h-14 bg-sky-500 text-slate-950 rounded-full shadow-2xl shadow-sky-500/40 border-4 border-slate-950 flex items-center justify-center transform active:scale-90 transition-all">
-                        <i class="fas fa-plus text-xl"></i>
-                    </button>
-                </div>
                 <button data-view="ledgers" class="mobile-nav-link flex flex-col items-center space-y-1 text-slate-500">
                     <i class="fas fa-list-ul text-lg"></i>
                     <span class="text-[9px] font-medium uppercase tracking-wider">Ledger</span>
@@ -372,6 +366,11 @@
                     class="mobile-nav-link flex flex-col items-center space-y-1 text-slate-500">
                     <i class="fas fa-chart-pie text-lg"></i>
                     <span class="text-[9px] font-medium uppercase tracking-wider">Summary</span>
+                </button>
+                <button id="mobile-logout-nav"
+                    class="mobile-nav-link flex flex-col items-center space-y-1 text-slate-500">
+                    <i class="fas fa-sign-out-alt text-lg"></i>
+                    <span class="text-[9px] font-medium uppercase tracking-wider">Logout</span>
                 </button>
             </nav>
         </main>
