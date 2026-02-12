@@ -266,7 +266,7 @@ const AppLogic = {
         const formatDropdownText = (name, type, amount) => {
             const isMobile = window.innerWidth < 768;
             // Standard length for name part to push the brackets to the right
-            const targetNameLen = isMobile ? 12 : 18;
+            const targetNameLen = isMobile ? 18 : 22;
             const truncatedName = name.length > targetNameLen ? name.slice(0, targetNameLen - 3) + '...' : name;
             const namePart = truncatedName.padEnd(targetNameLen, '\u00A0');
 
