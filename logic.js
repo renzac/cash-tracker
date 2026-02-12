@@ -915,9 +915,10 @@ const AppLogic = {
                 </div>
 
             <div class="grid grid-cols-3 gap-2 md:gap-6">
-            <div class="bg-slate-900/50 p-3 md:p-6 rounded-2xl md:rounded-3xl border border-slate-800 shadow-xl text-center">
-                <div class="text-[8px] md:text-[10px] text-slate-500 uppercase tracking-widest mb-1 font-bold">Net Worth</div>
-                <div class="text-xs md:text-2xl font-bold font-orbitron text-white line-clamp-1">${myMoney.toFixed(2)}</div>
+            <div onclick="AppLogic.showTotalMoneyStatement()" class="bg-slate-900/50 p-3 md:p-6 rounded-2xl md:rounded-3xl border border-slate-800 shadow-xl text-center cursor-pointer hover:border-teal-500/50 transition-all group active:scale-95">
+                <div class="text-[8px] md:text-[10px] text-slate-500 uppercase tracking-widest mb-1 font-bold group-hover:text-teal-400 transition-colors">Net Worth</div>
+                <div class="text-xs md:text-2xl font-bold font-orbitron text-white line-clamp-1 group-hover:text-teal-400 transition-colors">${myMoney.toFixed(2)}</div>
+                <div class="text-[6px] md:text-[8px] text-teal-500/50 uppercase tracking-tighter mt-1 opacity-0 group-hover:opacity-100 transition-opacity font-bold">View Statement</div>
             </div>
             <div class="bg-slate-900/50 p-3 md:p-6 rounded-2xl md:rounded-3xl border border-slate-800 shadow-xl text-center">
                 <div class="text-[8px] md:text-[10px] text-emerald-500/70 uppercase tracking-widest mb-1 font-bold">Recv</div>
@@ -1025,8 +1026,7 @@ const AppLogic = {
             return { ...t, isIn, isOut, currentBal: runningBal };
         });
 
-        // Display newest first
-        const displayRows = [...statementRows].reverse();
+        // Generate rows (relevantTxs is already sorted ascending)
 
         let html = `
             <div onclick="this.parentElement.classList.add('hidden')" 
@@ -1200,7 +1200,7 @@ const AppLogic = {
             <div id="modal-content" class="bg-slate-900 w-full max-w-4xl rounded-t-3xl md:rounded-3xl p-6 lg:p-8 space-y-6 shadow-2xl border-t border-slate-800 transform animate-fade-in flex flex-col max-h-[90vh]">
                 <div class="flex items-center justify-between">
                     <div>
-                        <h2 class="text-xl font-bold font-orbitron text-teal-400">Total Money Statement</h2>
+                        <h2 class="text-xl font-bold font-orbitron text-teal-400">Net Worth Statement</h2>
                         <p class="text-xs text-slate-500 uppercase tracking-widest">Global Net Worth History</p>
                     </div>
                     <button onclick="window.AppLogic.showSummary()" class="text-slate-500 hover:text-slate-300 font-bold text-sm uppercase tracking-wider cursor-pointer"><i class="fas fa-arrow-left mr-2"></i>Back</button>
@@ -1225,7 +1225,7 @@ const AppLogic = {
                                     ${(initialAccountsVal + initialRollingVal).toFixed(3)}
                                 </td>
                             </tr>
-                            ${statementRows.reverse().join('')}
+                            ${statementRows.join('')}
                         </tbody>
                     </table>
                 </div>
