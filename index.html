@@ -37,7 +37,7 @@
         <div class="w-full max-w-sm space-y-8 animate-fade-in">
             <div class="text-center">
                 <h1
-                    class="text-4xl font-bold font-orbitron text-transparent bg-clip-text bg-gradient-to-r from-sky-400 to-indigo-500">
+                    class="text-3xl md:text-4xl font-bold font-orbitron text-transparent bg-clip-text bg-gradient-to-r from-sky-400 to-indigo-500">
                     ANTIGRAVITY</h1>
                 <p class="text-slate-400 mt-2">Finance Core</p>
             </div>
@@ -120,9 +120,9 @@
             <header
                 class="flex items-center justify-between p-4 lg:p-6 bg-slate-950/50 backdrop-blur-md border-b border-slate-800 pt-safe z-50">
                 <div class="flex items-center space-x-3">
-                    <div id="connection-status" class="w-2 h-2 rounded-full bg-slate-700"
+                    <div id="connection-status" class="w-1.5 h-1.5 rounded-full bg-slate-700"
                         title="Checking connection..."></div>
-                    <span id="current-view-title" class="text-xl font-semibold">Transactions</span>
+                    <span id="current-view-title" class="text-lg md:text-xl font-semibold">Transactions</span>
                 </div>
                 <div class="flex items-center space-x-2 md:space-x-4">
                     <button id="global-search-btn" onclick="window.AppLogic.showGlobalSearch()"
@@ -130,7 +130,7 @@
                         title="Search Ledgers & Accounts">
                         <i class="fas fa-search text-xl"></i>
                     </button>
-                    <span id="display-date" class="text-slate-400 text-sm block"></span>
+                    <span id="display-date" class="text-slate-400 text-[10px] md:text-sm block"></span>
                     <button id="summary-btn"
                         class="hidden md:block bg-indigo-500/20 text-indigo-400 px-3 py-1.5 rounded-full text-xs md:text-sm font-semibold border border-indigo-500/30">
                         Summary
@@ -342,7 +342,7 @@
 
             <!-- Bottom Nav (Mobile) -->
             <nav
-                class="lg:hidden fixed bottom-0 left-0 right-0 bg-slate-950/80 backdrop-blur-xl border-t border-slate-800 flex justify-around items-center h-20 px-2 pb-safe z-[2000]">
+                class="lg:hidden fixed bottom-0 left-0 right-0 bg-slate-950/80 backdrop-blur-xl border-t border-slate-800 flex justify-around items-center h-20 px-1 pb-safe z-[2000]">
                 <button data-view="transactions" class="mobile-nav-link active flex flex-col items-center space-y-1">
                     <i class="fas fa-exchange-alt text-lg"></i>
                     <span class="text-[9px] font-medium uppercase tracking-wider">Entries</span>
