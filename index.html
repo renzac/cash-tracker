@@ -11,6 +11,12 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="style.css">
     <link rel="manifest" href="manifest.json">
+
+    <!-- iOS PWA Tags -->
+    <link rel="apple-touch-icon" href="https://cdn-icons-png.flaticon.com/512/3661/3661966.png">
+    <meta name="apple-mobile-web-app-title" content="AG Finance">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link
@@ -130,7 +136,11 @@
                         title="Search Ledgers & Accounts">
                         <i class="fas fa-search text-xl"></i>
                     </button>
-                    <span id="display-date" class="text-slate-400 text-[10px] md:text-sm block"></span>
+                    <div class="flex flex-col items-end leading-tight">
+                        <span id="display-date" class="text-slate-200 text-[10px] md:text-sm block font-medium"></span>
+                        <span id="sync-status" class="text-[8px] text-slate-500 uppercase tracking-tighter">Checking
+                            Sync...</span>
+                    </div>
                     <button id="summary-btn"
                         class="hidden md:block bg-indigo-500/20 text-indigo-400 px-3 py-1.5 rounded-full text-xs md:text-sm font-semibold border border-indigo-500/30">
                         Summary
@@ -232,12 +242,7 @@
                 <div id="view-ledgers" class="view-content hidden p-4 lg:p-6">
                     <div class="flex items-center justify-between mb-6">
                         <h2 class="text-2xl font-bold font-orbitron text-slate-100">Ledgers</h2>
-                        <button onclick="AppLogic.syncBalances()"
-                            class="p-3 bg-slate-800 text-slate-400 rounded-2xl hover:bg-slate-700 transition-all flex items-center space-x-2 border border-slate-700 shadow-lg"
-                            title="Sync logic to fix old data">
-                            <i class="fas fa-sync-alt"></i>
-                            <span class="text-xs font-bold uppercase hidden sm:inline">Sync Logic</span>
-                        </button>
+                        <h2 class="text-2xl font-bold font-orbitron text-slate-100">Ledgers</h2>
                     </div>
 
                     <div class="bg-slate-900/50 border border-slate-800 rounded-3xl p-6 mb-6">
@@ -390,10 +395,22 @@
     <script src="logic.js?v=10"></script>
     <script src="auth.js?v=10"></script>
     <script>
-        if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
+        if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
                 navigator.serviceWorker.register('./sw.js')
-                    .then(reg => console.log('SW Registered'))
+                    .then(reg => {
+                        console.log('SW Registered');
+                        // Refresh if service worker updates
+                        reg.onupdatefound = () => {
+                            const newSW = reg.installing;
+                            newSW.onstatechange = () => {
+                                if (newSW.state === 'installed' && navigator.serviceWorker.controller) {
+                                    console.log('New SW version found, refreshing...');
+                                    location.reload();
+                                }
+                            };
+                        };
+                    })
                     .catch(err => console.error('SW Registration failed', err));
             });
         }

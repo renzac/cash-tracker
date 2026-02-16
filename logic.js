@@ -15,27 +15,81 @@ const AppLogic = {
         await this.renderAll();
         this.updateConnectionStatus();
 
+        // Setup periodic sync check (every 2 minutes)
+        setInterval(() => this.checkForUpdates(), 120000);
+
+        // Make sync indicator clickable for manual refresh
+        const syncArea = document.getElementById('sync-status')?.parentElement;
+        if (syncArea) {
+            syncArea.style.cursor = 'pointer';
+            syncArea.title = 'Click to sync now';
+            syncArea.addEventListener('click', () => this.refreshFromCloud());
+        }
+
         // Default date to today
         document.getElementById('tx-date').valueAsDate = new Date();
     },
 
     async updateConnectionStatus() {
         const dot = document.getElementById('connection-status');
-        if (!dot) return;
+        const syncEl = document.getElementById('sync-status');
+        if (!dot || !syncEl) return;
+
         const connected = await Store.checkConnection();
-        dot.className = `w-2 h-2 rounded-full ${connected ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]' : 'bg-rose-500 shadow-[0_0_8px_rgba(244,63,94,0.5)]'}`;
-        dot.title = connected ? 'Cloud Connected' : 'Cloud Offline / Setup Required';
+
+        if (Store.syncBlocked) {
+            dot.className = `w-1.5 h-1.5 rounded-full bg-orange-500 shadow-[0_0_8px_rgba(249,115,22,0.5)]`;
+            dot.title = 'Sync Blocked: Connection error on startup. Changes not saving.';
+            syncEl.innerText = 'Offline - Read Only';
+            syncEl.className = 'text-[8px] text-orange-500 uppercase tracking-tighter font-bold';
+        } else if (connected) {
+            dot.className = `w-1.5 h-1.5 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]`;
+            dot.title = 'Cloud Connected';
+            if (Store.data.lastSync) {
+                const last = new Date(Store.data.lastSync);
+                syncEl.innerText = `Saved: ${last.getHours()}:${String(last.getMinutes()).padStart(2, '0')}`;
+            } else {
+                syncEl.innerText = 'Connected';
+            }
+            syncEl.className = 'text-[8px] text-slate-500 uppercase tracking-tighter';
+        } else {
+            dot.className = `w-1.5 h-1.5 rounded-full bg-rose-500 shadow-[0_0_8px_rgba(244,63,94,0.5)]`;
+            dot.title = 'Cloud Offline - Changes saved locally only';
+            syncEl.innerText = 'Offline - Local Only';
+            syncEl.className = 'text-[8px] text-rose-500 uppercase tracking-tighter';
+        }
+    },
+
+    async checkForUpdates() {
+        if (Store.syncBlocked) return;
+        const cloudTime = await Store.getLatestTimestamp();
+        if (cloudTime && Store.data.lastSync) {
+            const cloudDate = new Date(cloudTime);
+            const localDate = new Date(Store.data.lastSync);
+
+            if (cloudDate > localDate) {
+                console.log("Newer data found in cloud. Syncing...");
+                await this.refreshFromCloud();
+            }
+        }
     },
 
     async refreshFromCloud() {
         Auth.showToast("Syncing with cloud...");
-        const success = await Store.loadFromCloud();
-        if (success) {
+        const status = await Store.loadFromCloud();
+
+        if (status === 'SUCCESS' || status === 'EMPTY') {
+            // Unblock sync if successful
+            Store.syncBlocked = false;
             await this.renderAll();
             this.updateConnectionStatus();
-            Auth.showToast("Data retrieved from cloud!");
+            Auth.showToast("Data synced successfully!");
         } else {
-            Auth.showToast("Failed to retrieve data. Check Supabase setup.", "error");
+            console.error("Manual Sync Failed:", status);
+            // Show specific error to user for debugging
+            if (status === 'CLIENT_MISSING') Auth.showToast("Sync Failed: Cloud library missing.", "error");
+            else if (status.startsWith('NETWORK_ERROR')) Auth.showToast("Sync Failed: Network Error.", "error");
+            else Auth.showToast(`Sync Failed: ${status}`, "error");
         }
     },
 

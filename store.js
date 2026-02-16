@@ -8,11 +8,8 @@ const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZ
 let supabaseClient = null;
 
 if (SUPABASE_URL.trim() && SUPABASE_KEY.trim()) {
-    // window.supabase is provided by the CDN script
     if (window.supabase && window.supabase.createClient) {
         supabaseClient = window.supabase.createClient(SUPABASE_URL.trim(), SUPABASE_KEY.trim());
-    } else {
-        console.warn("Supabase library not yet loaded or failed.");
     }
 }
 
@@ -45,22 +42,31 @@ const Store = {
             currentUser: null,
             rememberMe: false,
             biometricsEnabled: false
-        }
+        },
+        lastSync: null // Timestamp of last successful cloud save
     },
+
+    // Session-only flags (not persisted)
+    cloudLoaded: false, // True if we successfully fetched FROM cloud this session
+    syncBlocked: false, // True if we failed to connect (blocks saving to avoid overwriting)
 
     async init() {
         if (supabaseClient) {
-            // Attempt to load from cloud. If successful, this.data will be populated.
-            // If not, this.data will remain its initial state (or empty if no initial data).
-            const hasCloudData = await this.loadFromCloud();
-            if (!hasCloudData) {
-                // If cloud load failed or no data, check local storage for migration
+            // LOAD STATUS: 'SUCCESS' | 'EMPTY' | 'ERROR' codes
+            const loadStatus = await this.loadFromCloud();
+
+            if (loadStatus === 'SUCCESS' || loadStatus === 'EMPTY') {
+                this.cloudLoaded = true;
+                this.syncBlocked = false;
+            } else {
+                // If cloud load failed due to connection, BLOCK saving
+                // We use local fallback ONLY for viewing, but we don't allow overwrite
+                console.warn("Cloud connection failed. Entering Read-Only mode for safety.");
+                this.syncBlocked = true;
+
                 const localData = localStorage.getItem(DB_KEY);
                 if (localData) {
-                    console.log("Supabase active but cloud empty or failed. Migrating local data...");
-                    // Parse local data, but ensure 'auth' is not overwritten if it was already loaded from deviceData
-                    const parsedLocalData = JSON.parse(localData);
-                    this.data = { ...this.data, ...parsedLocalData }; // Merge, keeping initial auth if not in localData
+                    this.data = { ...this.data, ...JSON.parse(localData) };
                 }
             }
         } else {
@@ -111,8 +117,10 @@ const Store = {
             });
         }
 
-        // If we migrated or seeded, save to cloud
-        await this.save();
+        // If we migrated or seeded and sync isn't blocked, save to cloud
+        if (!this.syncBlocked) {
+            await this.save();
+        }
     },
 
     async save() {
@@ -131,30 +139,37 @@ const Store = {
     },
 
     async loadFromCloud() {
-        if (!supabaseClient) return false;
+        console.log("Store: Attempting to load from cloud...");
+        if (!supabaseClient) {
+            console.warn("Store: Supabase client not initialized.");
+            return 'CLIENT_MISSING';
+        }
         try {
             const { data, error } = await supabaseClient.from('app_data').select('payload').eq('id', 'global_state').single();
             if (data) {
+                // CRITICAL: Preserve local Auth object before overwriting data
+                const currentAuth = this.data.auth || { currentUser: null, rememberMe: false, biometricsEnabled: false };
+
                 this.data = data.payload;
-                console.log("Cloud data loaded successfully.");
-                return true;
+
+                // Restore Auth immediately
+                this.data.auth = currentAuth;
+
+                console.log("Store: Cloud data loaded successfully.");
+                return 'SUCCESS';
             } else if (error) {
                 if (error.code === 'PGRST116') {
-                    console.log("Cloud database is empty (no data found).");
-                    return false;
+                    console.log("Store: Cloud database is empty (no data found).");
+                    return 'EMPTY';
                 }
-                if (error.code === '42P01') {
-                    console.error("Supabase table 'app_data' not found. Please run the SQL script.");
-                    setTimeout(() => Auth.showToast("Cloud table missing! Run the SQL script in Supabase.", "error"), 2000);
-                } else {
-                    console.error("Cloud load error:", error.message);
-                }
-                return false;
+                console.error("Store: Cloud load error:", error.message);
+                return 'DB_ERROR: ' + error.message;
             }
-            return false;
+            return 'UNKNOWN_ERROR';
         } catch (e) {
-            console.error("Cloud connection failed:", e);
-            return false;
+            console.error("Store: Critical Cloud connection failed:", e);
+            // Return error but ensure it doesn't crash the specific call stack if possible
+            return 'NETWORK_ERROR: ' + e.message;
         }
     },
 
@@ -168,15 +183,43 @@ const Store = {
         }
     },
 
-    async saveToCloud() {
+    async getLatestTimestamp() {
+        if (!supabaseClient) return null;
         try {
-            // EXCLUDE auth from cloud sync to avoid device session leaks
+            const { data, error } = await supabaseClient.from('app_data').select('payload->lastSync').eq('id', 'global_state').single();
+            if (data && data.lastSync) return data.lastSync;
+            return null;
+        } catch (e) {
+            return null;
+        }
+    },
+
+    async saveToCloud() {
+        if (this.syncBlocked) {
+            console.warn("Save blocked: No verified cloud connection this session.");
+            return;
+        }
+        try {
+            // Update last sync timestamp
+            this.data.lastSync = new Date().toISOString();
+
+            // EXCLUDE auth from cloud sync
             const cloudPayload = { ...this.data };
             delete cloudPayload.auth;
 
-            await supabaseClient.from('app_data').upsert({ id: 'global_state', payload: cloudPayload });
+            const { error } = await supabaseClient.from('app_data').upsert({
+                id: 'global_state',
+                payload: cloudPayload
+            });
+
+            if (error) throw error;
+
+            // Also save a local backup copy
+            localStorage.setItem(DB_KEY, JSON.stringify(cloudPayload));
         } catch (e) {
             console.error("Cloud save failed:", e);
+            // Don't set syncBlocked here, just log failure. 
+            // The indicator will handle visual warning via checkConnection.
         }
     },
 
