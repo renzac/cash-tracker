@@ -255,10 +255,30 @@ const AppLogic = {
             return;
         }
 
+        let isDebtTransfer = false;
+
+        let fromType = 'account';
+        let toType = 'account';
+
         // --- Contra Validations ---
         if (tx.type === 'contra') {
-            const from = Store.data.accounts.find(a => a.id == tx.accountId) || Store.data.ledgers.find(l => l.id == tx.accountId);
-            const to = Store.data.accounts.find(a => a.id == tx.toId) || Store.data.ledgers.find(l => l.id == tx.toId);
+            const accList = Store.data.accounts.map(a => String(a.id));
+            const ledList = Store.data.ledgers.map(l => String(l.id));
+
+            fromType = accList.includes(tx.accountId) ? 'account' : 'ledger';
+            toType = accList.includes(tx.toId) ? 'account' : 'ledger';
+
+            const from = fromType === 'account' ?
+                Store.data.accounts.find(a => a.id == tx.accountId) :
+                Store.data.ledgers.find(l => l.id == tx.accountId);
+
+            const to = toType === 'account' ?
+                Store.data.accounts.find(a => a.id == tx.toId) :
+                Store.data.ledgers.find(l => l.id == tx.toId);
+
+            // Store explicit types in transaction
+            tx.fromType = fromType;
+            tx.toType = toType;
 
             // 1. Prevent overlapping source/target
             if (tx.accountId == tx.toId) {
@@ -266,16 +286,24 @@ const AppLogic = {
                 return;
             }
 
-            // 2. Ledger Validation (Don't over-settle)
-            if (from && from.groupId !== undefined && from.groupId > 2) {
-                if (tx.amount > Math.abs(from.balance) + 0.001) {
-                    Auth.showToast("Amount exceeds outstanding balance", "error");
-                    return;
+            const fromIsLedger = fromType === 'ledger';
+            const toIsLedger = toType === 'ledger';
+            isDebtTransfer = fromIsLedger && toIsLedger;
+
+            // 2. Validation Logic
+            if (fromIsLedger && from.groupId > 2) {
+                // Bypass over-settle check ONLY if it's Ledger-to-Ledger (Debt Transfer)
+                if (!isDebtTransfer) {
+                    if (tx.amount > Math.abs(from.balance) + 0.001) {
+                        Auth.showToast("Amount exceeds outstanding balance", "error");
+                        return;
+                    }
                 }
             }
-            if (to && to.groupId !== undefined && to.groupId > 2) {
-                // If it's a Ledger-to-Ledger move, we should check compatibility
-                if (from && from.groupId !== undefined) {
+
+            if (toIsLedger && to.groupId > 2) {
+                if (fromIsLedger) {
+                    // Safety Rail: Must be same type (Payable/Receivable)
                     const sameSign = (from.balance >= 0 && to.balance >= 0) || (from.balance <= 0 && to.balance <= 0);
                     if (!sameSign) {
                         Auth.showToast("Cannot transfer between payable and receivable", "error");
@@ -289,9 +317,17 @@ const AppLogic = {
         document.getElementById('transaction-form').reset();
         // Default to today
         document.getElementById('tx-date').value = new Date().toISOString().split('T')[0];
+
         this.populateDropdowns();
         await this.renderAll();
-        Auth.showToast("Entry Saved");
+
+        if (isDebtTransfer) {
+            const from = Store.data.ledgers.find(l => l.id == tx.accountId);
+            const to = Store.data.ledgers.find(l => l.id == tx.toId);
+            Auth.showToast(`Debt transferred from ${from.name} to ${to.name}`);
+        } else {
+            Auth.showToast("Entry Saved");
+        }
     },
 
     async renderAll() {
@@ -578,33 +614,43 @@ const AppLogic = {
 
         // --- Contra Validations ---
         if (updated.type === 'contra') {
-            const from = Store.data.accounts.find(a => a.id == updated.accountId) || Store.data.ledgers.find(l => l.id == updated.accountId);
-            const to = Store.data.accounts.find(a => a.id == updated.toId) || Store.data.ledgers.find(l => l.id == updated.toId);
+            const accList = Store.data.accounts.map(a => String(a.id));
+            const ledList = Store.data.ledgers.map(l => String(l.id));
 
-            if (updated.accountId == updated.toId) {
+            const fromType = accList.includes(updated.accountId) ? 'account' : 'ledger';
+            const toType = ledList.includes(updated.toId) ? 'ledger' : 'account'; // Prioritize account if ambiguous
+
+            const from = fromType === 'account' ? Store.data.accounts.find(a => a.id == updated.accountId) : Store.data.ledgers.find(l => l.id == updated.accountId);
+            const to = toType === 'account' ? Store.data.accounts.find(a => a.id == updated.toId) : Store.data.ledgers.find(l => l.id == updated.toId);
+
+            if (updated.accountId == updated.toId && fromType === toType) {
                 Auth.showToast("Source and Target cannot be the same", "error");
                 return;
             }
 
-            // Note: Since balances might be "in flux" during edit (we reverse old then apply new), 
-            // a strict balance check here might be tricky if we don't account for the old transaction's impact.
-            // However, Store.updateTransaction handles reversing first. 
-            // To be truly safe, we'd check if (amount > currentBalance + (wasOldTxFromSource ? oldAmount : 0)).
-            // But for simplicity and safety, we allow edits but warn if it looks wrong.
-            // Actually, let's keep it simple as per requirements.
-            if (from && from.groupId !== undefined && from.groupId > 2) {
-                // If it was already from this source, we allow the original amount back
-                const oldTx = Store.data.transactions.find(t => t.id === id);
-                let available = Math.abs(from.balance);
-                if (oldTx && oldTx.accountId == updated.accountId) available += oldTx.amount;
+            updated.fromType = fromType;
+            updated.toType = toType;
 
-                if (updated.amount > available + 0.001) {
-                    Auth.showToast("Amount exceeds outstanding balance", "error");
-                    return;
+            const fromIsLedger = fromType === 'ledger';
+            const toIsLedger = toType === 'ledger';
+            const isDebtTransfer = fromIsLedger && toIsLedger;
+
+            if (fromIsLedger && from.groupId > 2) {
+                // Bypass over-settle check ONLY if it's Ledger-to-Ledger (Debt Transfer)
+                if (!isDebtTransfer) {
+                    const oldTx = Store.data.transactions.find(t => t.id === id);
+                    let available = Math.abs(from.balance);
+                    if (oldTx && oldTx.accountId == updated.accountId) available += oldTx.amount;
+
+                    if (updated.amount > available + 0.001) {
+                        Auth.showToast("Amount exceeds outstanding balance", "error");
+                        return;
+                    }
                 }
             }
-            if (to && to.groupId !== undefined && to.groupId > 2) {
-                if (from && from.groupId !== undefined) {
+
+            if (toIsLedger && to.groupId > 2) {
+                if (fromIsLedger) {
                     const sameSign = (from.balance >= 0 && to.balance >= 0) || (from.balance <= 0 && to.balance <= 0);
                     if (!sameSign) {
                         Auth.showToast("Cannot transfer between payable and receivable", "error");
@@ -1054,49 +1100,85 @@ const AppLogic = {
         }
 
         // Get ALL relevant transactions for this item, sorted by ID (timestamp)
-        const allRelevantTxs = Store.data.transactions.filter(t =>
-            (type === 'account' && (t.accountId == id || t.toId == id)) ||
-            (type === 'ledger' && (t.ledgerId == id || t.accountId == id || t.toId == id))
-        ).sort((a, b) => a.id - b.id);
+        // --- 0. Precise Transaction Filtering ---
+        const allRelevantTxs = Store.data.transactions.filter(t => {
+            const targetId = String(id);
+            const tFromId = String(t.accountId);
+            const tToId = String(t.toId);
+            const tLedId = String(t.ledgerId);
+
+            if (type === 'account') {
+                // In account mode, IDs 1, 2, 3... are strictly Banks/Cash
+                if (t.type === 'contra') {
+                    const from = Store.data.accounts.find(a => String(a.id) === tFromId);
+                    const to = Store.data.accounts.find(a => String(a.id) === tToId);
+                    // Only include if KFH (targetId) was involved AS AN ACCOUNT
+                    const fromMatches = (tFromId === targetId && from);
+                    const toMatches = (tToId === targetId && to);
+                    return fromMatches || toMatches;
+                }
+                // For Income/Expense, accountId MUST be the bank/cash side
+                return tFromId === targetId;
+            } else {
+                // Ledger mode: IDs 1, 2, 3... are strictly categories/people
+                if (t.type === 'contra') {
+                    const from = Store.data.ledgers.find(l => String(l.id) === tFromId);
+                    const to = Store.data.ledgers.find(l => String(l.id) === tToId);
+                    // Only include if this ledger was involved AS A LEDGER
+                    const fromMatches = (tFromId === targetId && from);
+                    const toMatches = (tToId === targetId && to);
+                    return fromMatches || toMatches;
+                }
+                // For Income/Expense, ledgerId is the correct field for the entity
+                return tLedId === targetId;
+            }
+        }).sort((a, b) => a.id - b.id);
+
+        // Helper: Determine if transaction is IN or OUT for the current view
+        const getSide = (t) => {
+            let isIn = false, isOut = false;
+            const targetId = String(id);
+            const tFromId = String(t.accountId);
+            const tToId = String(t.toId);
+            const tLedId = String(t.ledgerId);
+
+            if (type === 'account') {
+                if (t.type === 'expense') isOut = (tFromId === targetId);
+                else if (t.type === 'income') isIn = (tFromId === targetId);
+                else if (t.type === 'contra') {
+                    if (tFromId === targetId) isOut = true;
+                    if (tToId === targetId) isIn = true;
+                }
+            } else {
+                // Ledger Statement: KD leaving pocket/debt decreasing = OUT
+                // Ledger Statement: KD coming in/debt increasing = IN
+                if (t.type === 'expense') isOut = (tLedId === targetId);
+                else if (t.type === 'income') isIn = (tLedId === targetId);
+                else if (t.type === 'contra') {
+                    // Moving debt from Source (tFromId) to Target (tToId)
+                    if (tFromId === targetId) isIn = true; // Source gets balance + KD (Debt decreases/IN to pocket)
+                    if (tToId === targetId) isOut = true; // Target gets balance - KD (Debt increases/OUT from pocket)
+                }
+            }
+            return { isIn, isOut };
+        };
 
         // 1. Calculate Opening Balance (Everything before startStr)
         let periodOpeningBal = item.openingBalance || 0;
-        const prePeriodTxs = allRelevantTxs.filter(t => t.date < startStr);
-
-        prePeriodTxs.forEach(t => {
-            let isIn = false, isOut = false;
-            if (type === 'account') {
-                isOut = (t.type === 'expense' && t.accountId == id) || (t.type === 'contra' && t.accountId == id);
-                isIn = (t.type === 'income' && t.accountId == id) || (t.type === 'contra' && t.toId == id);
-            } else {
-                isOut = (t.type === 'expense' && t.ledgerId == id) || (t.type === 'contra' && t.toId == id);
-                isIn = (t.type === 'income' && t.ledgerId == id) || (t.type === 'contra' && t.accountId == id);
-            }
-
-            if (isIn) {
-                periodOpeningBal += (type === 'ledger' && item.groupId > 2) ? -t.amount : t.amount;
-            }
-            if (isOut) {
-                periodOpeningBal += (type === 'ledger' && item.groupId > 2) ? t.amount : -t.amount;
-            }
+        allRelevantTxs.filter(t => t.date < startStr).forEach(t => {
+            const { isIn, isOut } = getSide(t);
+            if (isIn) periodOpeningBal += (type === 'ledger' && item.groupId > 2) ? -t.amount : t.amount;
+            if (isOut) periodOpeningBal += (type === 'ledger' && item.groupId > 2) ? t.amount : -t.amount;
         });
 
-        // 2. Filter and Map Current Period Transactions
+        // 2. Map and Map Current Period Transactions
         const periodTxs = allRelevantTxs.filter(t => t.date >= startStr && t.date <= endStr);
         let runningBal = periodOpeningBal;
         let totalIn = 0;
         let totalOut = 0;
 
         const statementRows = periodTxs.map(t => {
-            let isIn = false, isOut = false;
-            if (type === 'account') {
-                isOut = (t.type === 'expense' && t.accountId == id) || (t.type === 'contra' && t.accountId == id);
-                isIn = (t.type === 'income' && t.accountId == id) || (t.type === 'contra' && t.toId == id);
-            } else {
-                isOut = (t.type === 'expense' && t.ledgerId == id) || (t.type === 'contra' && t.toId == id);
-                isIn = (t.type === 'income' && t.ledgerId == id) || (t.type === 'contra' && t.accountId == id);
-            }
-
+            const { isIn, isOut } = getSide(t);
             if (isIn) {
                 totalIn += t.amount;
                 runningBal += (type === 'ledger' && item.groupId > 2) ? -t.amount : t.amount;
@@ -1105,7 +1187,6 @@ const AppLogic = {
                 totalOut += t.amount;
                 runningBal += (type === 'ledger' && item.groupId > 2) ? t.amount : -t.amount;
             }
-
             return { ...t, isIn, isOut, currentBal: runningBal };
         });
 
@@ -1278,10 +1359,23 @@ const AppLogic = {
                 if (toAcc) impact += t.amount;
                 if (fromLed && fromLed.groupId > 2) impact -= t.amount;
             } else if (t.type === 'contra') {
-                const from = accounts.find(a => a.id == t.accountId) || rollingLedgers.find(l => l.id == t.accountId);
-                const to = accounts.find(a => a.id == t.toId) || rollingLedgers.find(l => l.id == t.toId);
-                if (from) impact -= t.amount;
-                if (to) impact += t.amount;
+                const from = accounts.find(a => a.id == t.accountId) || Store.data.ledgers.find(l => l.id == t.accountId);
+                const to = accounts.find(a => a.id == t.toId) || Store.data.ledgers.find(l => l.id == t.toId);
+
+                if (from && to) {
+                    const fromIsLedger = from.groupId !== undefined;
+                    const toIsLedger = to.groupId !== undefined;
+
+                    if (fromIsLedger && toIsLedger) {
+                        // Ledger-to-Ledger Debt Transfer (Inversion Logic)
+                        // Net Worth Impact: (+Amount to Source) + (-Amount to Target) = 0
+                        impact = 0;
+                    } else {
+                        // Regular Account/Ledger Transfer
+                        if (from.groupId === undefined || from.groupId > 2) impact -= t.amount;
+                        if (to.groupId === undefined || to.groupId > 2) impact += t.amount;
+                    }
+                }
             }
             return impact;
         };
