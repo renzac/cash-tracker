@@ -1040,122 +1040,174 @@ const AppLogic = {
         this.modalContainer.classList.remove('hidden');
     },
 
-    showStatement(type, id) {
+    showStatement(type, id, startStr, endStr) {
         const item = Store.data[type + 's'].find(i => i.id == id);
-        // Get transactions, sort chronologically for balance calculation
-        const relevantTxs = Store.data.transactions.filter(t =>
+
+        // Default to current month if dates not provided
+        const now = new Date();
+        if (!startStr) {
+            const firstDay = new Date(now.getFullYear(), now.getMonth(), 1);
+            startStr = firstDay.toISOString().split('T')[0];
+        }
+        if (!endStr) {
+            endStr = now.toISOString().split('T')[0];
+        }
+
+        // Get ALL relevant transactions for this item, sorted by ID (timestamp)
+        const allRelevantTxs = Store.data.transactions.filter(t =>
             (type === 'account' && (t.accountId == id || t.toId == id)) ||
             (type === 'ledger' && (t.ledgerId == id || t.accountId == id || t.toId == id))
         ).sort((a, b) => a.id - b.id);
 
-        let runningBal = item.openingBalance || 0;
-        let totalIn = 0;
-        let totalOut = 0;
+        // 1. Calculate Opening Balance (Everything before startStr)
+        let periodOpeningBal = item.openingBalance || 0;
+        const prePeriodTxs = allRelevantTxs.filter(t => t.date < startStr);
 
-        const statementRows = relevantTxs.map(t => {
+        prePeriodTxs.forEach(t => {
             let isIn = false, isOut = false;
             if (type === 'account') {
                 isOut = (t.type === 'expense' && t.accountId == id) || (t.type === 'contra' && t.accountId == id);
                 isIn = (t.type === 'income' && t.accountId == id) || (t.type === 'contra' && t.toId == id);
             } else {
-                // Ledger Perspective: Income increases what they owe (In), Expense decreases (Out)
-                // Actually, as per previous fix: Expense (user pays them) = Led+, Income (they pay user) = Led-
-                // So "In" for Ledger = User paying them? No, usually In means money coming IN to account.
-                // Let's stick to user perspective: In = Received from them, Out = Paid to them.
-                isOut = (t.type === 'expense' && t.ledgerId == id) || (t.type === 'contra' && t.toId == id); // Paid to them
-                isIn = (t.type === 'income' && t.ledgerId == id) || (t.type === 'contra' && t.accountId == id); // Recv from them
+                isOut = (t.type === 'expense' && t.ledgerId == id) || (t.type === 'contra' && t.toId == id);
+                isIn = (t.type === 'income' && t.ledgerId == id) || (t.type === 'contra' && t.accountId == id);
+            }
+
+            if (isIn) {
+                periodOpeningBal += (type === 'ledger' && item.groupId > 2) ? -t.amount : t.amount;
+            }
+            if (isOut) {
+                periodOpeningBal += (type === 'ledger' && item.groupId > 2) ? t.amount : -t.amount;
+            }
+        });
+
+        // 2. Filter and Map Current Period Transactions
+        const periodTxs = allRelevantTxs.filter(t => t.date >= startStr && t.date <= endStr);
+        let runningBal = periodOpeningBal;
+        let totalIn = 0;
+        let totalOut = 0;
+
+        const statementRows = periodTxs.map(t => {
+            let isIn = false, isOut = false;
+            if (type === 'account') {
+                isOut = (t.type === 'expense' && t.accountId == id) || (t.type === 'contra' && t.accountId == id);
+                isIn = (t.type === 'income' && t.accountId == id) || (t.type === 'contra' && t.toId == id);
+            } else {
+                isOut = (t.type === 'expense' && t.ledgerId == id) || (t.type === 'contra' && t.toId == id);
+                isIn = (t.type === 'income' && t.ledgerId == id) || (t.type === 'contra' && t.accountId == id);
             }
 
             if (isIn) {
                 totalIn += t.amount;
-                // For rolling ledgers, income decreases the asset (He owes me less)
                 runningBal += (type === 'ledger' && item.groupId > 2) ? -t.amount : t.amount;
             }
             if (isOut) {
                 totalOut += t.amount;
-                // For rolling ledgers, expense increases the asset (I paid him, he owes me more)
                 runningBal += (type === 'ledger' && item.groupId > 2) ? t.amount : -t.amount;
             }
 
             return { ...t, isIn, isOut, currentBal: runningBal };
         });
 
-        // Generate rows (relevantTxs is already sorted ascending)
-
         let html = `
             <div onclick="this.parentElement.classList.add('hidden')" 
-                class="fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-end md:items-center justify-center p-0 md:p-4">
+                class="fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-end md:items-center justify-center p-0 md:p-4 z-[3000]">
                 <div onclick="event.stopPropagation()" 
-                    id="modal-content" class="bg-slate-900 w-full max-w-3xl rounded-t-3xl md:rounded-3xl p-6 lg:p-8 space-y-6 shadow-2xl border-t border-slate-800 transform animate-fade-in flex flex-col max-h-[90vh]">
+                    id="modal-content" class="bg-slate-900 w-full max-w-3xl rounded-t-3xl md:rounded-3xl p-6 lg:p-8 space-y-4 shadow-2xl border-t border-slate-800 transform animate-fade-in flex flex-col max-h-[90vh]">
+                    
                     <div class="flex items-center justify-between">
                         <div>
                             <h2 class="text-xl font-bold font-orbitron text-slate-100">${item.name}</h2>
-                            <p class="text-xs text-slate-500 uppercase tracking-widest">Statement History</p>
+                            <p class="text-[10px] text-slate-500 uppercase tracking-widest">Statement History</p>
                         </div>
-                        <div class="flex items-center space-x-2">
-                            <button onclick="AppLogic.exportStatementToExcel('${type}', ${id})" class="hidden md:flex items-center space-x-2 bg-emerald-500/20 text-emerald-400 px-3 py-1.5 rounded-lg text-xs font-semibold border border-emerald-500/30 hover:bg-emerald-500/30 transition-all">
+                        <div class="flex items-center space-x-3">
+                            <button onclick="AppLogic.exportStatementToExcel('${type}', ${id}, document.getElementById('stmt-start').value, document.getElementById('stmt-end').value)" class="hidden md:flex items-center space-x-2 bg-emerald-500/10 text-emerald-400 px-3 py-1.5 rounded-lg text-[10px] font-semibold border border-emerald-500/20 hover:bg-emerald-500/20 transition-all">
                                 <i class="fas fa-file-excel"></i>
-                                <span>Export to Excel</span>
+                                <span>Export</span>
                             </button>
-                            <button onclick="document.getElementById('modal-container').classList.add('hidden')" class="text-slate-500 hover:text-slate-300 font-bold text-sm uppercase tracking-wider cursor-pointer"><i class="fas fa-times"></i></button>
+                            <button onclick="document.getElementById('modal-container').classList.add('hidden')" class="text-slate-500 hover:text-slate-300 transition-colors">
+                                <i class="fas fa-times text-lg"></i>
+                            </button>
                         </div>
                     </div>
 
-                    <div class="flex-1 overflow-x-auto overflow-y-auto pr-2 custom-scrollbar">
+                    <!-- Date Filters -->
+                    <div class="bg-slate-950/50 p-3 rounded-2xl border border-slate-800/50 grid grid-cols-2 md:grid-cols-3 gap-3">
+                        <div class="space-y-1">
+                            <label class="text-[9px] text-slate-500 uppercase font-bold tracking-tight ml-1">From</label>
+                            <input type="date" id="stmt-start" value="${startStr}" 
+                                class="w-full bg-slate-900 border border-slate-800 rounded-lg px-2 py-1.5 text-xs text-slate-300 focus:outline-none focus:border-sky-500/50">
+                        </div>
+                        <div class="space-y-1">
+                            <label class="text-[9px] text-slate-500 uppercase font-bold tracking-tight ml-1">To</label>
+                            <input type="date" id="stmt-end" value="${endStr}" 
+                                class="w-full bg-slate-900 border border-slate-800 rounded-lg px-2 py-1.5 text-xs text-slate-300 focus:outline-none focus:border-sky-500/50">
+                        </div>
+                        <div class="col-span-2 md:col-span-1 flex items-end">
+                            <button onclick="AppLogic.showStatement('${type}', ${id}, document.getElementById('stmt-start').value, document.getElementById('stmt-end').value)" 
+                                class="w-full bg-sky-500/10 text-sky-400 border border-sky-500/20 hover:bg-sky-500/20 py-1.5 rounded-lg text-xs font-bold transition-all uppercase tracking-wider">
+                                Filter Rows
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="flex-1 overflow-x-auto overflow-y-auto pr-1 custom-scrollbar">
                         <table class="w-full text-left text-sm border-separate border-spacing-0">
                             <thead class="sticky top-0 bg-slate-900 text-slate-500 border-b border-slate-800 z-10">
                                 <tr>
                                     <th class="py-3 px-2 font-bold uppercase text-[9px] tracking-widest border-b border-slate-800">Date</th>
-                                    <th class="py-3 px-2 font-bold uppercase text-[9px] tracking-widest border-b border-slate-800">Item / Particulars</th>
-                                    <th class="py-3 px-2 font-bold uppercase text-[9px] tracking-widest text-rose-400 border-b border-slate-800">Paid (Out)</th>
-                                    <th class="py-3 px-2 font-bold uppercase text-[9px] tracking-widest text-emerald-400 border-b border-slate-800">Recv (In)</th>
-                                    <th class="py-3 px-2 font-bold uppercase text-[9px] tracking-widest text-sky-400 text-right border-b border-slate-800">Available Balance</th>
+                                    <th class="py-3 px-2 font-bold uppercase text-[9px] tracking-widest border-b border-slate-800">Particulars</th>
+                                    <th class="py-3 px-2 font-bold uppercase text-[9px] tracking-widest text-rose-400 border-b border-slate-800">Out</th>
+                                    <th class="py-3 px-2 font-bold uppercase text-[9px] tracking-widest text-emerald-400 border-b border-slate-800">In</th>
+                                    <th class="py-3 px-2 font-bold uppercase text-[9px] tracking-widest text-sky-400 text-right border-b border-slate-800 font-orbitron">Balance</th>
                                 </tr>
                             </thead>
                             <tbody class="divide-y divide-slate-800/30">
-                                <tr class="bg-slate-950/30">
-                                    <td class="py-3 px-2 text-[10px] text-slate-500 font-bold uppercase" colspan="2">Opening Balance</td>
-                                    <td class="py-3 px-2" colspan="2"></td>
+                                <!-- Opening Balance Row -->
+                                <tr class="bg-slate-950/40">
+                                    <td class="py-3 px-2 text-slate-500 font-orbitron text-[10px]" colspan="1">${startStr.split('-').slice(1).reverse().join('/')}</td>
+                                    <td class="py-3 px-2 text-[10px] text-slate-400 font-bold uppercase tracking-tight" colspan="3">Opening Balance (B/F)</td>
                                     <td class="py-3 px-2 text-right font-orbitron text-xs text-slate-400">
-                                        ${item.openingBalance >= 0 ? '+' : ''}${item.openingBalance.toFixed(3)}
+                                        ${periodOpeningBal >= 0 ? '+' : ''}${periodOpeningBal.toFixed(3)}
                                     </td>
                                 </tr>
-                                ${statementRows.map(t => {
+
+                                ${statementRows.length === 0 ? `
+                                    <tr>
+                                        <td colspan="5" class="py-10 text-center text-slate-600 text-[10px] uppercase tracking-widest italic">No transactions found in this period</td>
+                                    </tr>
+                                ` : statementRows.map(t => {
             let relatedName = '-';
             if (type === 'account') {
-                // Watching a Bank: Who is the Ledger?
                 const led = Store.data.ledgers.find(l => l.id == t.ledgerId);
                 if (led) relatedName = led.name;
                 else if (t.type === 'contra') {
-                    // If contra, the other side is an account
                     const otherAccId = t.accountId == id ? t.toId : t.accountId;
                     const otherAcc = Store.data.accounts.find(a => a.id == otherAccId);
-                    relatedName = otherAcc ? `Transfer: ${otherAcc.name}` : 'Transfer';
+                    relatedName = otherAcc ? `Trf: ${otherAcc.name}` : 'Transfer';
                 }
             } else {
-                // Watching a Ledger: Which Bank was used?
                 const acc = Store.data.accounts.find(a => a.id == t.accountId);
                 if (acc) relatedName = acc.name;
                 else if (t.type === 'contra') {
-                    // Contra in ledger view (unusual but possible if ledger used as source)
                     const otherId = t.accountId == id ? t.toId : t.accountId;
                     const other = Store.data.accounts.find(a => a.id == otherId) || Store.data.ledgers.find(l => l.id == otherId);
-                    relatedName = other ? `Transfer: ${other.name}` : 'Transfer';
+                    relatedName = other ? `Trf: ${other.name}` : 'Transfer';
                 }
             }
 
             return `
                                         <tr onclick="AppLogic.editTx(${t.id})" class="hover:bg-slate-800/50 transition-colors cursor-pointer group">
-                                            <td class="py-3 px-2 whitespace-nowrap text-slate-400 text-[11px] font-orbitron group-hover:text-sky-400 transition-colors">${t.date.split('-').slice(1).join('/')}</td>
-                                            <td class="py-3 px-2 max-w-[180px]">
-                                                <div class="text-[10px] text-sky-400 font-bold uppercase truncate">
-                                                    ${t.type === 'contra' ? `Transfer: ${relatedName}` : relatedName}
+                                            <td class="py-3 px-2 whitespace-nowrap text-slate-400 text-[10px] font-orbitron group-hover:text-sky-400 transition-colors">${t.date.split('-').slice(1).reverse().join('/')}</td>
+                                            <td class="py-3 px-2 max-w-[150px]">
+                                                <div class="text-[9px] text-sky-400 font-bold uppercase truncate">
+                                                    ${t.type === 'contra' ? relatedName : (relatedName || 'General')}
                                                 </div>
-                                                <div class="text-[10px] text-slate-500 truncate" title="${t.remark}">${t.remark || '-'}</div>
+                                                <div class="text-[9px] text-slate-500 truncate mt-0.5" title="${t.remark}">${t.remark || '-'}</div>
                                             </td>
-                                            <td class="py-3 px-2 text-rose-400 font-orbitron text-xs font-medium">${t.isOut ? t.amount.toFixed(3) : '-'}</td>
-                                            <td class="py-3 px-2 text-emerald-400 font-orbitron text-xs font-medium">${t.isIn ? t.amount.toFixed(3) : '-'}</td>
-                                            <td class="py-3 px-2 text-right font-orbitron text-xs ${t.currentBal < 0 ? 'text-rose-400' : 'text-sky-400'}">
+                                            <td class="py-3 px-2 text-rose-400 font-orbitron text-[11px] font-medium">${t.isOut ? t.amount.toFixed(3) : '-'}</td>
+                                            <td class="py-3 px-2 text-emerald-400 font-orbitron text-[11px] font-medium">${t.isIn ? t.amount.toFixed(3) : '-'}</td>
+                                            <td class="py-3 px-2 text-right font-orbitron text-[11px] font-bold ${t.currentBal < 0 ? 'text-rose-400' : 'text-sky-400'}">
                                                 ${t.currentBal < 0 ? '' : '+'}${t.currentBal.toFixed(3)}
                                             </td>
                                         </tr>
@@ -1165,19 +1217,20 @@ const AppLogic = {
                         </table>
                     </div>
 
-                    <div class="grid grid-cols-3 gap-4 pt-4 border-t border-slate-800">
-                        <div class="bg-slate-950 p-3 rounded-xl border border-slate-800/50">
-                            <div class="text-[8px] text-slate-500 uppercase tracking-widest mb-1">Total Paid</div>
-                            <div class="text-sm font-bold font-orbitron text-rose-400">${totalOut.toFixed(3)}</div>
+                    <!-- Footer Summary -->
+                    <div class="grid grid-cols-3 gap-3 pt-3 border-t border-slate-800">
+                        <div class="bg-slate-950/30 p-2.5 rounded-xl border border-slate-800/50">
+                            <div class="text-[7px] text-slate-500 uppercase tracking-widest mb-1">Total Paid</div>
+                            <div class="text-xs font-bold font-orbitron text-rose-400">${totalOut.toFixed(3)}</div>
                         </div>
-                        <div class="bg-slate-950 p-3 rounded-xl border border-slate-800/50">
-                            <div class="text-[8px] text-slate-500 uppercase tracking-widest mb-1">Total Recv</div>
-                            <div class="text-sm font-bold font-orbitron text-emerald-400">${totalIn.toFixed(3)}</div>
+                        <div class="bg-slate-950/30 p-2.5 rounded-xl border border-slate-800/50">
+                            <div class="text-[7px] text-slate-500 uppercase tracking-widest mb-1">Total Recv</div>
+                            <div class="text-xs font-bold font-orbitron text-emerald-400">${totalIn.toFixed(3)}</div>
                         </div>
-                        <div class="bg-slate-950 p-3 rounded-xl border border-sky-500/20">
-                            <div class="text-[8px] text-sky-500/50 uppercase tracking-widest mb-1">Closing Balance</div>
-                            <div class="text-sm font-bold font-orbitron ${item.balance < 0 ? 'text-rose-400' : 'text-sky-400'}">
-                                ${item.balance < 0 ? '' : '+'}${item.balance.toFixed(3)}
+                        <div class="bg-slate-950/30 p-2.5 rounded-xl border border-sky-500/10">
+                            <div class="text-[7px] text-sky-500/50 uppercase tracking-widest mb-1">End Balance</div>
+                            <div class="text-xs font-bold font-orbitron ${runningBal < 0 ? 'text-rose-400' : 'text-sky-400'}">
+                                ${runningBal < 0 ? '' : '+'}${runningBal.toFixed(3)}
                             </div>
                         </div>
                     </div>
@@ -1189,45 +1242,64 @@ const AppLogic = {
         this.modalContainer.classList.remove('hidden');
     },
 
-    showTotalMoneyStatement() {
+    showTotalMoneyStatement(startStr, endStr) {
         const accounts = Store.data.accounts;
         const rollingLedgers = Store.data.ledgers.filter(l => l.groupId > 2);
 
+        // Default to current month if dates not provided
+        const now = new Date();
+        if (!startStr) {
+            const firstDay = new Date(now.getFullYear(), now.getMonth(), 1);
+            startStr = firstDay.toISOString().split('T')[0];
+        }
+        if (!endStr) {
+            endStr = now.toISOString().split('T')[0];
+        }
+
+        // 1. Calculate Initial Base (Absolute Opening Balances)
         const initialAccountsVal = accounts.reduce((sum, a) => sum + (a.openingBalance || 0), 0);
         const initialRollingVal = rollingLedgers.reduce((sum, l) => sum + (l.openingBalance || 0), 0);
+        let absoluteBaseNetWorth = initialAccountsVal + initialRollingVal;
 
-        let runningNetWorth = initialAccountsVal + initialRollingVal;
+        // 2. Sort ALL transactions to calculate current position
+        const allTxs = [...Store.data.transactions].sort((a, b) => a.id - b.id);
 
-        const sortedTxs = [...Store.data.transactions].sort((a, b) => a.id - b.id);
-
-        const statementRows = [];
-        let totalNetIn = 0;
-        let totalNetOut = 0;
-
-        sortedTxs.forEach(t => {
+        // Utility to calculate impact of a single transaction on "Internal Net Worth"
+        const getImpact = (t) => {
             let impact = 0;
-
-            // Calculate net impact on "internal" money (Accounts + Rolling Ledgers)
             if (t.type === 'expense') {
                 const fromAcc = accounts.find(a => a.id == t.accountId);
                 const toLed = Store.data.ledgers.find(l => l.id == t.ledgerId);
-
                 if (fromAcc) impact -= t.amount;
                 if (toLed && toLed.groupId > 2) impact += t.amount;
             } else if (t.type === 'income') {
                 const toAcc = accounts.find(a => a.id == t.accountId);
                 const fromLed = Store.data.ledgers.find(l => l.id == t.ledgerId);
-
                 if (toAcc) impact += t.amount;
                 if (fromLed && fromLed.groupId > 2) impact -= t.amount;
             } else if (t.type === 'contra') {
                 const from = accounts.find(a => a.id == t.accountId) || rollingLedgers.find(l => l.id == t.accountId);
                 const to = accounts.find(a => a.id == t.toId) || rollingLedgers.find(l => l.id == t.toId);
-
                 if (from) impact -= t.amount;
                 if (to) impact += t.amount;
             }
+            return impact;
+        };
 
+        // 3. Calculate Opening Net Worth for the period (Base + everything before startStr)
+        let periodOpeningNetWorth = absoluteBaseNetWorth;
+        allTxs.filter(t => t.date < startStr).forEach(t => {
+            periodOpeningNetWorth += getImpact(t);
+        });
+
+        // 4. Process period transactions
+        let runningNetWorth = periodOpeningNetWorth;
+        let totalNetIn = 0;
+        let totalNetOut = 0;
+        const statementRows = [];
+
+        allTxs.filter(t => t.date >= startStr && t.date <= endStr).forEach(t => {
+            const impact = getImpact(t);
             if (Math.abs(impact) > 0.0001) {
                 runningNetWorth += impact;
                 if (impact > 0) totalNetIn += impact;
@@ -1235,9 +1307,9 @@ const AppLogic = {
 
                 statementRows.push(`
                     <tr class="hover:bg-slate-950/50 transition-colors">
-                        <td class="py-3 px-2 whitespace-nowrap text-slate-400 text-[11px] font-orbitron">${t.date.split('-').slice(1).join('/')}</td>
+                        <td class="py-3 px-2 whitespace-nowrap text-slate-400 text-[11px] font-orbitron">${t.date.split('-').reverse().slice(0, 2).join('/')}</td>
                         <td class="py-3 px-2">
-                            <div class="text-[10px] text-slate-500 font-bold uppercase tracking-tighter mb-0.5">${t.type}</div>
+                            <div class="text-[10px] text-teal-500 font-bold uppercase tracking-tighter mb-0.5">${t.type}</div>
                             <div class="text-[10px] text-slate-300 truncate" title="${t.remark}">${t.remark || '-'}</div>
                         </td>
                         <td class="py-3 px-2 text-rose-400 font-orbitron text-xs font-medium">${impact < 0 ? Math.abs(impact).toFixed(3) : '-'}</td>
@@ -1251,13 +1323,35 @@ const AppLogic = {
         });
 
         const html = `
-            <div id="modal-content" class="bg-slate-900 w-full max-w-4xl rounded-t-3xl md:rounded-3xl p-6 lg:p-8 space-y-6 shadow-2xl border-t border-slate-800 transform animate-fade-in flex flex-col max-h-[90vh]">
+            <div id="modal-content" class="bg-slate-900 w-full max-w-4xl rounded-t-3xl md:rounded-3xl p-6 lg:p-8 space-y-4 shadow-2xl border-t border-slate-800 transform animate-fade-in flex flex-col max-h-[90vh]">
                 <div class="flex items-center justify-between">
                     <div>
-                        <h2 class="text-xl font-bold font-orbitron text-teal-400">Net Worth Statement</h2>
-                        <p class="text-xs text-slate-500 uppercase tracking-widest">Global Net Worth History</p>
+                        <h2 class="text-xl font-bold font-orbitron text-teal-400 uppercase tracking-tighter">Net Worth History</h2>
+                        <p class="text-[9px] text-slate-500 uppercase tracking-widest">Growth & Position Tracking</p>
                     </div>
-                    <button onclick="window.AppLogic.showSummary()" class="text-slate-500 hover:text-slate-300 font-bold text-sm uppercase tracking-wider cursor-pointer"><i class="fas fa-arrow-left mr-2"></i>Back</button>
+                    <button onclick="window.AppLogic.showSummary()" class="bg-slate-950/50 text-slate-500 hover:text-sky-400 border border-slate-800 px-4 py-2 rounded-xl text-[10px] font-bold uppercase tracking-widest transition-all cursor-pointer">
+                        <i class="fas fa-arrow-left mr-2"></i>Back to Summary
+                    </button>
+                </div>
+
+                <!-- Date Filter Bar -->
+                <div class="bg-slate-950/50 p-3 rounded-2xl border border-slate-800/50 grid grid-cols-2 md:grid-cols-3 gap-3">
+                    <div class="space-y-1">
+                        <label class="text-[9px] text-slate-500 uppercase font-bold tracking-tight ml-1">From</label>
+                        <input type="date" id="nw-start" value="${startStr}" 
+                            class="w-full bg-slate-900 border border-slate-800 rounded-lg px-2 py-1.5 text-xs text-slate-300 focus:outline-none focus:border-teal-500/50">
+                    </div>
+                    <div class="space-y-1">
+                        <label class="text-[9px] text-slate-500 uppercase font-bold tracking-tight ml-1">To</label>
+                        <input type="date" id="nw-end" value="${endStr}" 
+                            class="w-full bg-slate-900 border border-slate-800 rounded-lg px-2 py-1.5 text-xs text-slate-300 focus:outline-none focus:border-teal-500/50">
+                    </div>
+                    <div class="col-span-2 md:col-span-1 flex items-end">
+                        <button onclick="AppLogic.showTotalMoneyStatement(document.getElementById('nw-start').value, document.getElementById('nw-end').value)" 
+                            class="w-full bg-teal-500/10 text-teal-400 border border-teal-500/20 hover:bg-teal-500/20 py-1.5 rounded-lg text-xs font-bold transition-all uppercase tracking-wider">
+                            Apply Filter
+                        </button>
+                    </div>
                 </div>
 
                 <div class="flex-1 overflow-x-auto overflow-y-auto pr-2 custom-scrollbar">
@@ -1273,10 +1367,10 @@ const AppLogic = {
                         </thead>
                         <tbody class="divide-y divide-slate-800/30">
                             <tr class="bg-slate-950/30">
-                                <td class="py-3 px-2 text-[10px] text-slate-500 font-bold uppercase" colspan="2">Initial Opening Balances</td>
+                                <td class="py-3 px-2 text-[10px] text-slate-500 font-bold uppercase" colspan="2">Net Worth (B/F) at ${startStr.split('-').reverse().slice(0, 2).join('/')}</td>
                                 <td class="py-3 px-2" colspan="2"></td>
                                 <td class="py-3 px-2 text-right font-orbitron text-xs text-slate-400">
-                                    ${(initialAccountsVal + initialRollingVal).toFixed(3)}
+                                    ${periodOpeningNetWorth.toFixed(3)}
                                 </td>
                             </tr>
                             ${statementRows.join('')}
@@ -1294,7 +1388,7 @@ const AppLogic = {
                         <div class="text-sm font-bold font-orbitron text-rose-400">-${totalNetOut.toFixed(3)}</div>
                     </div>
                     <div class="bg-slate-950 p-3 rounded-xl border border-teal-500/20">
-                        <div class="text-[8px] text-teal-500/50 uppercase tracking-widest mb-1">Net Worth</div>
+                        <div class="text-[8px] text-teal-500/50 uppercase tracking-widest mb-1">Selected End Net</div>
                         <div class="text-sm font-bold font-orbitron text-teal-400">
                             ${runningNetWorth.toFixed(3)}
                         </div>
@@ -1430,20 +1524,56 @@ const AppLogic = {
         `).join('');
     },
 
-    exportStatementToExcel(type, id) {
+    exportStatementToExcel(type, id, startStr, endStr) {
         const item = Store.data[type + 's'].find(i => i.id == id);
-        const relevantTxs = Store.data.transactions.filter(t =>
+
+        // Use provided dates or default to current month
+        const now = new Date();
+        if (!startStr) {
+            const firstDay = new Date(now.getFullYear(), now.getMonth(), 1);
+            startStr = firstDay.toISOString().split('T')[0];
+        }
+        if (!endStr) {
+            endStr = now.toISOString().split('T')[0];
+        }
+
+        const allRelevantTxs = Store.data.transactions.filter(t =>
             (type === 'account' && (t.accountId == id || t.toId == id)) ||
             (type === 'ledger' && (t.ledgerId == id || t.accountId == id || t.toId == id))
         ).sort((a, b) => a.id - b.id);
 
+        // 1. Calculate Opening Balance for the period
+        let periodOpeningBal = item.openingBalance || 0;
+        const prePeriodTxs = allRelevantTxs.filter(t => t.date < startStr);
+
+        prePeriodTxs.forEach(t => {
+            let isIn = false, isOut = false;
+            if (type === 'account') {
+                isOut = (t.type === 'expense' && t.accountId == id) || (t.type === 'contra' && t.accountId == id);
+                isIn = (t.type === 'income' && t.accountId == id) || (t.type === 'contra' && t.toId == id);
+            } else {
+                isOut = (t.type === 'expense' && t.ledgerId == id) || (t.type === 'contra' && t.toId == id);
+                isIn = (t.type === 'income' && t.ledgerId == id) || (t.type === 'contra' && t.accountId == id);
+            }
+
+            if (isIn) {
+                periodOpeningBal += (type === 'ledger' && item.groupId > 2) ? -t.amount : t.amount;
+            }
+            if (isOut) {
+                periodOpeningBal += (type === 'ledger' && item.groupId > 2) ? t.amount : -t.amount;
+            }
+        });
+
+        // 2. Filter Period Transactions
+        const periodTxs = allRelevantTxs.filter(t => t.date >= startStr && t.date <= endStr);
+
         let csv = "Date,Related To,Remark,Paid (Out),Recv (In),Balance\n";
 
-        // Opening Balance Row
-        csv += `Opening Balance,,,,,"${(item.openingBalance || 0).toFixed(3)}"\n`;
+        // Opening Balance Row in CSV
+        csv += `${startStr.split('-').reverse().join('/')},Opening Balance (B/F),Calculated Value before period,,,\"${periodOpeningBal.toFixed(3)}\"\n`;
 
-        let runningBal = item.openingBalance || 0;
-        relevantTxs.forEach(t => {
+        let runningBal = periodOpeningBal;
+        periodTxs.forEach(t => {
             let isIn = false, isOut = false;
             if (type === 'account') {
                 isOut = (t.type === 'expense' && t.accountId == id) || (t.type === 'contra' && t.accountId == id);
@@ -1463,7 +1593,7 @@ const AppLogic = {
                 else if (t.type === 'contra') {
                     const otherAccId = t.accountId == id ? t.toId : t.accountId;
                     const otherAcc = Store.data.accounts.find(a => a.id == otherAccId);
-                    relatedName = otherAcc ? `Transfer: ${otherAcc.name}` : 'Transfer';
+                    relatedName = otherAcc ? `Trf: ${otherAcc.name}` : 'Transfer';
                 }
             } else {
                 const acc = Store.data.accounts.find(a => a.id == t.accountId);
@@ -1471,17 +1601,17 @@ const AppLogic = {
                 else if (t.type === 'contra') {
                     const otherId = t.accountId == id ? t.toId : t.accountId;
                     const other = Store.data.accounts.find(a => a.id == otherId) || Store.data.ledgers.find(l => l.id == otherId);
-                    relatedName = other ? `Transfer: ${other.name}` : 'Transfer';
+                    relatedName = other ? `Trf: ${other.name}` : 'Transfer';
                 }
             }
 
             const row = [
-                t.date,
-                `"${relatedName}"`,
-                `"${t.remark || ''}"`,
+                t.date.split('-').reverse().join('/'),
+                `\"${relatedName}\"`,
+                `\"${t.remark || ''}\"`,
                 isOut ? t.amount.toFixed(3) : '0.000',
                 isIn ? t.amount.toFixed(3) : '0.000',
-                `"${runningBal.toFixed(3)}"`
+                `\"${runningBal.toFixed(3)}\"`
             ];
             csv += row.join(',') + "\n";
         });
@@ -1490,7 +1620,7 @@ const AppLogic = {
         const link = document.createElement("a");
         const url = URL.createObjectURL(blob);
         link.setAttribute("href", url);
-        link.setAttribute("download", `${item.name}_Statement_${new Date().toISOString().split('T')[0]}.csv`);
+        link.setAttribute("download", `${item.name}_Statement_${startStr}_to_${endStr}.csv`);
         link.style.visibility = 'hidden';
         document.body.appendChild(link);
         link.click();
