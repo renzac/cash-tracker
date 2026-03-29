@@ -117,6 +117,10 @@ const Store = {
             });
         }
 
+        // --- NEW: LOAN PORTFOLIO DEFAULTS ---
+        if (!this.data.loans) this.data.loans = [];
+        if (!this.data.loanPayments) this.data.loanPayments = [];
+
         // If we migrated or seeded and sync isn't blocked, save to cloud
         if (!this.syncBlocked) {
             await this.save();
@@ -428,5 +432,53 @@ const Store = {
             user.password = newPass;
             await this.save();
         }
+    },
+
+    // --- LOAN PORTFOLIO METHODS ---
+    async addLoan(loan) {
+        loan.id = crypto.randomUUID();
+        if (!loan.created_at) loan.created_at = new Date().toISOString();
+        if (loan.is_active === undefined) loan.is_active = true;
+        if (loan.partner_share_pct === undefined) loan.partner_share_pct = 75;
+        if (loan.my_share_pct === undefined) loan.my_share_pct = 25;
+        
+        this.data.loans.push(loan);
+        await this.save();
+        return loan;
+    },
+
+    async updateLoan(id, updatedLoan) {
+        const index = this.data.loans.findIndex(l => l.id === id);
+        if (index !== -1) {
+            this.data.loans[index] = { ...this.data.loans[index], ...updatedLoan };
+            await this.save();
+        }
+    },
+
+    async deleteLoan(id) {
+        this.data.loans = this.data.loans.filter(l => l.id !== id);
+        this.data.loanPayments = this.data.loanPayments.filter(p => p.loan_id !== id);
+        await this.save();
+    },
+
+    async markLoanPaid(loanId, monthYear) {
+        // monthYear format: 'YYYY-MM'
+        const existing = this.data.loanPayments.find(p => p.loan_id === loanId && p.month_year === monthYear);
+        if (!existing) {
+            this.data.loanPayments.push({
+                loan_id: loanId,
+                month_year: monthYear,
+                status: 'YES',
+                created_at: new Date().toISOString()
+            });
+            await this.save();
+            return true;
+        }
+        return false;
+    },
+
+    async unmarkLoanPaid(loanId, monthYear) {
+        this.data.loanPayments = this.data.loanPayments.filter(p => !(p.loan_id === loanId && p.month_year === monthYear));
+        await this.save();
     }
-};
+}

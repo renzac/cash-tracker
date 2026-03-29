@@ -102,6 +102,10 @@
                     class="nav-link w-full flex items-center space-x-3 px-4 py-3 rounded-xl transition-all">
                     <i class="fas fa-university"></i><span>Accounts</span>
                 </button>
+                <button data-view="loans"
+                    class="nav-link w-full flex items-center space-x-3 px-4 py-3 rounded-xl transition-all">
+                    <i class="fas fa-briefcase"></i><span>Portfolio</span>
+                </button>
                 <button id="admin-nav" data-view="admin"
                     class="hidden nav-link w-full flex items-center space-x-3 px-4 py-3 rounded-xl transition-all">
                     <i class="fas fa-user-shield"></i><span>Admin</span>
@@ -342,6 +346,69 @@
                         <div id="user-management-list" class="space-y-4"></div>
                     </div>
                 </div>
+                <div id="view-loans" class="view-content hidden p-4 lg:p-6 space-y-6">
+                    <!-- Reminders Widget -->
+                    <div id="loan-reminders-container"></div>
+
+                    <!-- Totals Row -->
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div id="kwd-portfolio-card" class="bg-slate-900 border border-slate-800 rounded-3xl p-6 shadow-xl relative overflow-hidden group">
+                            <div class="absolute -right-4 -top-4 text-sky-500/10 text-6xl rotate-12 group-hover:scale-110 transition-transform"><i class="fas fa-landmark"></i></div>
+                            <h4 class="text-xs font-bold text-sky-500 uppercase tracking-widest mb-1">KWD Portfolio</h4>
+                            <div id="kwd-total-principal" class="text-2xl font-bold font-orbitron text-slate-100">0.000</div>
+                            <div class="mt-4 flex justify-between text-xs">
+                                <span class="text-slate-500">Monthly Int.</span>
+                                <span id="kwd-total-interest" class="font-bold text-emerald-400">0.000</span>
+                            </div>
+                            <div class="mt-1 flex justify-between text-xs">
+                                <span class="text-slate-500">My Share (25%)</span>
+                                <span id="kwd-my-share" class="font-bold text-sky-400 font-orbitron">0.000</span>
+                            </div>
+                            <div class="mt-1 flex justify-between text-xs">
+                                <span class="text-slate-500">Partner Share</span>
+                                <span id="kwd-partner-share" class="font-bold text-slate-300 font-orbitron">0.000</span>
+                            </div>
+                        </div>
+                        <div id="inr-portfolio-card" class="bg-slate-900 border border-slate-800 rounded-3xl p-6 shadow-xl relative overflow-hidden group">
+                            <div class="absolute -right-4 -top-4 text-orange-500/10 text-6xl rotate-12 group-hover:scale-110 transition-transform"><i class="fas fa-rupee-sign"></i></div>
+                            <h4 class="text-xs font-bold text-orange-500 uppercase tracking-widest mb-1">INR Portfolio</h4>
+                            <div id="inr-total-principal" class="text-2xl font-bold font-orbitron text-slate-100">0.00</div>
+                            <div class="mt-4 flex justify-between text-xs">
+                                <span class="text-slate-500">Monthly Int.</span>
+                                <span id="inr-total-interest" class="font-bold text-emerald-400">0.00</span>
+                            </div>
+                            <div class="mt-1 flex justify-between text-xs">
+                                <span class="text-slate-500">My Share (25%)</span>
+                                <span id="inr-my-share" class="font-bold text-orange-400 font-orbitron">0.00</span>
+                            </div>
+                            <div class="mt-1 flex justify-between text-xs">
+                                <span class="text-slate-500">Partner Share</span>
+                                <span id="inr-partner-share" class="font-bold text-slate-300 font-orbitron">0.00</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Filter Bar -->
+                    <div class="flex flex-col sm:flex-row items-center justify-between gap-4">
+                        <div class="relative w-full sm:w-64 lg:w-96">
+                            <i class="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-slate-600"></i>
+                            <input type="text" id="loan-search" placeholder="Search user (Subin, Rajesh...)"
+                                class="w-full bg-slate-900 border border-slate-800 rounded-xl pl-10 pr-4 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-sky-500 transition-all">
+                        </div>
+                        <div class="flex items-center bg-slate-900 border border-slate-800 rounded-xl p-1">
+                            <button id="toggle-active-loans" onclick="window.AppLogic.toggleLoanFilter('active')" class="px-4 py-1.5 rounded-lg text-xs font-bold transition-all bg-sky-500 text-slate-950">Active</button>
+                            <button id="toggle-closed-loans" onclick="window.AppLogic.toggleLoanFilter('closed')" class="px-4 py-1.5 rounded-lg text-xs font-bold transition-all text-slate-400 hover:text-slate-100">Closed</button>
+                        </div>
+                        <button onclick="window.AppLogic.showAddLoanModal()" class="w-full sm:w-auto bg-emerald-500 hover:bg-emerald-400 text-slate-950 px-6 py-2 rounded-xl font-bold flex items-center justify-center space-x-2 transition-all active:scale-95 shadow-lg shadow-emerald-500/20">
+                            <i class="fas fa-plus"></i><span>New Loan</span>
+                        </button>
+                    </div>
+
+                    <!-- Loan Cards List -->
+                    <div id="loan-list" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                        <!-- JS Dynamic Content -->
+                    </div>
+                </div>
 
             </div>
 
@@ -365,6 +432,11 @@
                     class="mobile-nav-link flex flex-col items-center space-y-1 text-slate-500">
                     <i class="fas fa-university text-lg"></i>
                     <span class="text-[9px] font-medium uppercase tracking-wider">Banks</span>
+                </button>
+                <button data-view="loans"
+                    class="mobile-nav-link flex flex-col items-center space-y-1 text-slate-500">
+                    <i class="fas fa-briefcase text-lg"></i>
+                    <span class="text-[9px] font-medium uppercase tracking-wider">Loans</span>
                 </button>
                 <button id="mobile-summary-btn"
                     class="mobile-nav-link flex flex-col items-center space-y-1 text-slate-500">

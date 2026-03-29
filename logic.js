@@ -28,6 +28,9 @@ const AppLogic = {
 
         // Default date to today
         document.getElementById('tx-date').valueAsDate = new Date();
+
+        // Setup Loan Portfolio Listeners
+        document.getElementById('loan-search')?.addEventListener('input', () => this.renderLoans());
     },
 
     async updateConnectionStatus() {
@@ -159,6 +162,7 @@ const AppLogic = {
             this.currentView = viewId;
             const title = viewId.split('-').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
             this.viewTitle.textContent = title;
+            if (viewId === 'loans') this.renderLoans();
         }
     },
 
@@ -336,6 +340,7 @@ const AppLogic = {
         this.renderLedgers();
         this.renderLedgerGroups();
         this.renderAccounts();
+        this.renderLoans();
         if (Store.data.auth.currentUser?.role === 'admin') this.renderUsers();
     },
 
@@ -1719,7 +1724,724 @@ const AppLogic = {
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
+    },
+
+    // --- LOAN PORTFOLIO LOGIC ---
+    loanFilterStatus: 'active',
+
+    toggleLoanFilter(status) {
+        this.loanFilterStatus = status;
+        const activeBtn = document.getElementById('toggle-active-loans');
+        const closedBtn = document.getElementById('toggle-closed-loans');
+
+        if (status === 'active') {
+            activeBtn.className = 'px-4 py-1.5 rounded-lg text-xs font-bold transition-all bg-sky-500 text-slate-950';
+            closedBtn.className = 'px-4 py-1.5 rounded-lg text-xs font-bold transition-all text-slate-400 hover:text-slate-100';
+        } else {
+            closedBtn.className = 'px-4 py-1.5 rounded-lg text-xs font-bold transition-all bg-sky-500 text-slate-950';
+            activeBtn.className = 'px-4 py-1.5 rounded-lg text-xs font-bold transition-all text-slate-400 hover:text-slate-100';
+        }
+        this.renderLoans();
+    },
+
+    formatCurrency(amount, code) {
+        const locale = code === 'INR' ? 'en-IN' : 'en-KW';
+        const decimals = code === 'KWD' ? 3 : 2;
+        return new Intl.NumberFormat(locale, {
+            minimumFractionDigits: decimals,
+            maximumFractionDigits: decimals
+        }).format(amount);
+    },
+
+    calculateLoanMetrics(loan) {
+        const principal = parseFloat(loan.principal) || 0;
+        const rate = parseFloat(loan.interest_rate) || 0;
+        const monthlyTotalInterest = (principal * rate) / 100;
+        const renjuShare = monthlyTotalInterest * (loan.my_share_pct / 100);
+        const partnerShare = monthlyTotalInterest * (loan.partner_share_pct / 100);
+
+        return {
+            monthlyTotalInterest,
+            renjuShare,
+            partner_share: partnerShare // for backward compatibility if needed
+        };
+    },
+
+    getNextInterestDate(loan) {
+        if (!loan.created_at) return null;
+        const startDate = new Date(loan.created_at);
+        const startDay = startDate.getDate();
+        const now = new Date();
+        let nextDate = new Date(now.getFullYear(), now.getMonth(), startDay);
+
+        // If the date for this month has already passed, set it for next month
+        if (nextDate < now) {
+            nextDate = new Date(now.getFullYear(), now.getMonth() + 1, startDay);
+        }
+        return nextDate;
+    },
+
+    renderLoans() {
+        const list = document.getElementById('loan-list');
+        if (!list) return;
+
+        const searchQuery = document.getElementById('loan-search')?.value.toLowerCase() || "";
+        let loans = Store.data.loans || [];
+
+        // Apply Active/Closed Filter
+        loans = loans.filter(l => this.loanFilterStatus === 'active' ? l.is_active : !l.is_active);
+
+        // Apply Search Filter
+        if (searchQuery) {
+            loans = loans.filter(l => l.end_user.toLowerCase().includes(searchQuery));
+        }
+
+        // Calculate Totals Row
+        // Calculate Totals
+        let kwdTotalPrincipal = 0;
+        let kwdTotalInterest = 0;
+        let kwdMyShare = 0;
+        let kwdPartnerShare = 0;
+        let inrTotalPrincipal = 0;
+        let inrTotalInterest = 0;
+        let inrMyShare = 0;
+        let inrPartnerShare = 0;
+
+        const activeLoans = Store.data.loans.filter(l => l.is_active);
+        activeLoans.forEach(l => {
+            const metrics = this.calculateLoanMetrics(l);
+            if (l.currency_code === 'KWD') {
+                kwdTotalPrincipal += parseFloat(l.principal);
+                kwdTotalInterest += metrics.monthlyTotalInterest;
+                kwdMyShare += metrics.renjuShare;
+                kwdPartnerShare += metrics.partner_share;
+            } else {
+                inrTotalPrincipal += parseFloat(l.principal);
+                inrTotalInterest += metrics.monthlyTotalInterest;
+                inrMyShare += metrics.renjuShare;
+                inrPartnerShare += metrics.partner_share;
+            }
+        });
+
+        // Update Totals UI
+        document.getElementById('kwd-total-principal').textContent = this.formatCurrency(kwdTotalPrincipal, 'KWD');
+        document.getElementById('kwd-total-interest').textContent = this.formatCurrency(kwdTotalInterest, 'KWD');
+        document.getElementById('kwd-my-share').textContent = this.formatCurrency(kwdMyShare, 'KWD');
+        document.getElementById('kwd-partner-share').textContent = this.formatCurrency(kwdPartnerShare, 'KWD');
+
+        document.getElementById('inr-total-principal').textContent = this.formatCurrency(inrTotalPrincipal, 'INR');
+        document.getElementById('inr-total-interest').textContent = this.formatCurrency(inrTotalInterest, 'INR');
+        document.getElementById('inr-my-share').textContent = this.formatCurrency(inrMyShare, 'INR');
+        document.getElementById('inr-partner-share').textContent = this.formatCurrency(inrPartnerShare, 'INR');
+
+        if (loans.length === 0) {
+            list.innerHTML = `<div class="col-span-full text-center py-20 text-slate-500 italic">No ${this.loanFilterStatus} loans found</div>`;
+            return;
+        }
+
+        const now = new Date();
+        const currentMonthYear = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+
+        // Render Reminders Dashboard
+        this.renderRemindersWidget();
+
+        list.innerHTML = loans.map(l => {
+            const metrics = this.calculateLoanMetrics(l);
+            const nextDate = this.getNextInterestDate(l);
+            const isPaid = Store.data.loanPayments.some(p => p.loan_id === l.id && p.month_year === currentMonthYear);
+            
+            // Refined Conditional Styling
+            let borderClass = 'border-slate-800';
+            let cardBg = 'bg-slate-900';
+            let statusBadge = '';
+            
+            if (!l.is_active) {
+                cardBg = 'bg-rose-500/5';
+                borderClass = 'border-rose-500/20';
+            } else if (!isPaid) {
+                const startDate = new Date(l.created_at);
+                const dueDay = startDate.getDate();
+                const todayDay = now.getDate();
+                
+                if (todayDay > dueDay) {
+                    borderClass = 'border-rose-500 animate-pulse-red shadow-[0_0_15px_rgba(244,63,94,0.3)]';
+                    statusBadge = `<span class="px-2 py-0.5 rounded-full bg-rose-500 text-slate-950 text-[8px] font-black uppercase tracking-tighter animate-pulse ml-2">OVERDUE</span>`;
+                } else if (dueDay - todayDay <= 3) {
+                    borderClass = 'border-amber-500 shadow-[0_0_15px_rgba(245,158,11,0.2)]';
+                    statusBadge = `<span class="px-2 py-0.5 rounded-full bg-amber-500 text-slate-950 text-[8px] font-black uppercase tracking-tighter ml-2">DUE SOON</span>`;
+                }
+            }
+
+            return `
+                <div class="loan-card ${cardBg} border ${borderClass} rounded-3xl p-6 flex flex-col justify-between group transition-all hover:scale-[1.02]">
+                    <div>
+                        <div class="flex justify-between items-start mb-4">
+                            <div>
+                                <h3 class="text-xl font-bold text-slate-100">${l.end_user}${statusBadge}</h3>
+                                <div class="text-[10px] text-slate-500 uppercase tracking-widest mt-1">
+                                    ${l.currency_code} Portfolio | Received: ${new Date(l.created_at).toLocaleDateString()}
+                                </div>
+                            </div>
+                            <div class="px-3 py-1 rounded-full text-[10px] font-bold uppercase ${l.is_active ? 'bg-emerald-500/10 text-emerald-500' : 'bg-rose-500/10 text-rose-500'}">
+                                ${l.is_active ? 'Active' : 'Closed'}
+                            </div>
+                        </div>
+
+                        <div class="space-y-3">
+                            <div class="flex justify-between items-center">
+                                <span class="text-xs text-slate-500">Principal</span>
+                                <span class="font-orbitron font-bold text-slate-200">${this.formatCurrency(l.principal, l.currency_code)}</span>
+                            </div>
+                            <div class="flex justify-between items-center text-xs">
+                                <span class="text-slate-500">Interest (${l.interest_rate}%)</span>
+                                <span class="font-bold text-emerald-400">${this.formatCurrency(metrics.monthlyTotalInterest, l.currency_code)}</span>
+                            </div>
+                            <div class="flex justify-between items-center text-[10px] text-slate-400 px-2 py-1 bg-slate-800/20 rounded-lg border border-white/5">
+                                <div class="flex flex-col">
+                                    <span class="text-[8px] uppercase tracking-tighter opacity-50">My Share (${l.my_share_pct}%)</span>
+                                    <span class="font-orbitron text-sky-400">${this.formatCurrency(metrics.renjuShare, l.currency_code)}</span>
+                                </div>
+                                <div class="flex flex-col text-right">
+                                    <span class="text-[8px] uppercase tracking-tighter opacity-50">Partner (${l.partner_share_pct}%)</span>
+                                    <span class="font-orbitron text-slate-300">${this.formatCurrency(metrics.partner_share, l.currency_code)}</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="mt-8 space-y-4">
+                        <div class="flex items-center justify-between text-[10px] text-slate-500 uppercase tracking-widest">
+                            <span>Next ${isPaid ? 'Payment' : 'Due'}</span>
+                            <span class="${!isPaid && now.getDate() > new Date(l.created_at).getDate() ? 'text-rose-500 font-bold' : ''}">${nextDate ? nextDate.toLocaleDateString('en-US', { day: 'numeric', month: 'short' }) : 'N/A'}</span>
+                        </div>
+                        
+                        <div class="flex space-x-2">
+                            ${l.is_active ? `
+                                <button onclick="event.stopPropagation(); ${isPaid ? `window.AppLogic.handleUnmarkPaid('${l.id}')` : `window.AppLogic.handleMarkPaid('${l.id}')`}" 
+                                    class="flex-1 py-1.5 rounded-xl font-bold text-xs transition-all ${isPaid ? 'bg-amber-500/10 text-amber-500 border border-amber-500/20 hover:bg-amber-500 hover:text-slate-950' : 'bg-sky-500 text-slate-950 hover:bg-sky-400 shadow-lg shadow-sky-500/20 active:scale-95'}">
+                                    ${isPaid ? '<i class="fas fa-undo mr-1"></i> Revert' : 'Mark Paid'}
+                                </button>
+                            ` : ''}
+                            <button onclick="event.stopPropagation(); window.AppLogic.showLoanStatement('${l.id}')" class="p-2.5 rounded-xl bg-slate-800 text-slate-400 hover:text-emerald-400 transition-all group-hover:bg-slate-700" title="View History">
+                                <i class="fas fa-file-invoice-dollar"></i>
+                            </button>
+                            <button onclick="event.stopPropagation(); window.AppLogic.showEditLoanModal('${l.id}')" class="p-2.5 rounded-xl bg-slate-800 text-slate-400 hover:text-sky-400 transition-all group-hover:bg-slate-700">
+                                <i class="fas fa-edit"></i>
+                            </button>
+                            <button onclick="event.stopPropagation(); window.AppLogic.handleDeleteLoan('${l.id}')" class="p-2.5 rounded-xl bg-slate-800 text-slate-400 hover:text-rose-500 transition-all group-hover:bg-slate-700">
+                                <i class="fas fa-trash-alt"></i>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }).join('');
+    },
+
+    async handleMarkPaid(loanId) {
+        const now = new Date();
+        const monthYear = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+        const success = await Store.markLoanPaid(loanId, monthYear);
+        if (success) {
+            Auth.showToast("Interest marked as paid");
+            this.renderLoans();
+        } else {
+            Auth.showToast("Already paid for this month", "info");
+        }
+    },
+
+    async handleDeleteLoan(loanId) {
+        console.log("Attempting to delete loan:", loanId);
+        if (window.confirm("Are you sure you want to delete this loan? This will also remove all payment records for this user.")) {
+            await Store.deleteLoan(loanId);
+            Auth.showToast("Loan Portfolio Deleted", "error");
+            AppLogic.renderLoans();
+        }
+    },
+
+    async handleUnmarkPaid(loanId) {
+        const now = new Date();
+        const monthYear = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+        if (confirm("Revert this month's payment to Unpaid?")) {
+            await Store.unmarkLoanPaid(loanId, monthYear);
+            Auth.showToast("Payment Reverted", "error");
+            this.renderLoans();
+        }
+    },
+
+    showAddLoanModal() {
+        const html = `
+            <div id="modal-content" class="bg-slate-900 w-full max-w-lg rounded-t-3xl md:rounded-3xl p-8 space-y-6 shadow-2xl border-t border-slate-800 animate-fade-in max-h-[90vh] overflow-y-auto">
+                <div class="flex items-center justify-between">
+                    <h3 class="text-xl font-bold font-orbitron text-emerald-400">New Loan Portfolio</h3>
+                    <button onclick="document.getElementById('modal-container').classList.add('hidden')" class="text-slate-500 hover:text-slate-300"><i class="fas fa-times text-xl"></i></button>
+                </div>
+                
+                <form id="add-loan-form" class="space-y-4">
+                    <div class="space-y-1">
+                        <label class="text-xs text-slate-500 ml-1 uppercase tracking-widest font-bold">End User Name</label>
+                        <input type="text" id="loan-user" placeholder="e.g. Subin" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-emerald-500 text-lg" required>
+                    </div>
+                    
+                    <div class="grid grid-cols-2 gap-4">
+                        <div class="space-y-1">
+                            <label class="text-xs text-slate-500 ml-1 uppercase tracking-widest font-bold">Currency</label>
+                            <select id="loan-currency" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-emerald-500">
+                                <option value="KWD">KWD (KD)</option>
+                                <option value="INR">INR (₹)</option>
+                            </select>
+                        </div>
+                        <div class="space-y-1">
+                            <label class="text-xs text-slate-500 ml-1 uppercase tracking-widest font-bold">Interest Rate (%)</label>
+                            <input type="number" step="0.01" id="loan-rate" value="1.00" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-emerald-500 font-orbitron" required>
+                        </div>
+                    </div>
+
+                    <div class="space-y-1">
+                        <label class="text-xs text-slate-500 ml-1 uppercase tracking-widest font-bold">Principal Amount</label>
+                        <input type="number" step="0.001" id="loan-principal" placeholder="0.000" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-emerald-500 font-orbitron text-xl text-emerald-400" required>
+                    </div>
+
+                    <div class="space-y-1">
+                        <label class="text-xs text-slate-500 ml-1 uppercase tracking-widest font-bold">Received Date</label>
+                        <input type="date" id="loan-date" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-emerald-500 font-orbitron text-slate-100" required>
+                    </div>
+
+                    <div class="p-4 bg-slate-950/50 rounded-2xl border border-slate-800 space-y-4">
+                        <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+                            <span class="text-[10px] text-slate-500 uppercase tracking-widest font-bold">Split Interest By</span>
+                            <div class="flex bg-slate-900 p-1 rounded-lg">
+                                <button type="button" id="mode-pct" onclick="window.AppLogic.toggleShareMode('pct')" class="px-3 py-1 text-[10px] font-bold rounded-md bg-sky-500 text-slate-950 transition-all">Percentage</button>
+                                <button type="button" id="mode-amt" onclick="window.AppLogic.toggleShareMode('amt')" class="px-3 py-1 text-[10px] font-bold rounded-md text-slate-400 hover:text-slate-100 transition-all">Amount</button>
+                            </div>
+                        </div>
+
+                        <!-- Percentage Inputs -->
+                        <div id="share-pct-inputs" class="grid grid-cols-2 gap-4">
+                            <div class="space-y-1">
+                                <label class="text-[10px] text-slate-500 uppercase tracking-widest">My Share %</label>
+                                <input type="number" id="loan-my-share-pct" value="25" class="w-full bg-transparent border-none p-0 focus:outline-none font-orbitron text-sky-400">
+                            </div>
+                            <div class="space-y-1 text-right">
+                                <label class="text-[10px] text-slate-500 uppercase tracking-widest">Partner Share %</label>
+                                <input type="number" id="loan-partner-share-pct" value="75" class="w-full bg-transparent border-none p-0 focus:outline-none font-orbitron text-slate-400 text-right">
+                            </div>
+                        </div>
+
+                        <!-- Amount Inputs (Hidden by default) -->
+                        <div id="share-amt-inputs" class="grid grid-cols-2 gap-4 hidden">
+                            <div class="space-y-1 border-r border-slate-800 pr-4">
+                                <label class="text-[10px] text-slate-500 uppercase tracking-widest">My Amount</label>
+                                <input type="number" step="0.001" id="loan-my-amt" placeholder="0.000" oninput="window.AppLogic.calculateFromAmounts()" class="w-full bg-transparent border-none p-0 focus:outline-none font-orbitron text-sky-400">
+                            </div>
+                            <div class="space-y-1 pl-4 text-right">
+                                <label class="text-[10px] text-slate-500 uppercase tracking-widest">Partner Amount</label>
+                                <input type="number" step="0.001" id="loan-partner-amt" placeholder="0.000" oninput="window.AppLogic.calculateFromAmounts()" class="w-full bg-transparent border-none p-0 focus:outline-none font-orbitron text-slate-400 text-right">
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="flex space-x-3 pt-4">
+                        <button type="button" onclick="document.getElementById('modal-container').classList.add('hidden')" class="flex-1 bg-slate-800 text-slate-400 py-4 rounded-xl font-bold hover:bg-slate-700 transition-all">Cancel</button>
+                        <button type="submit" class="flex-1 bg-emerald-500 text-slate-950 py-4 rounded-xl font-bold shadow-lg shadow-emerald-500/20 hover:bg-emerald-400 active:scale-95 transition-all">Create Loan</button>
+                    </div>
+                </form>
+            </div>
+        `;
+
+        this.modalContainer.innerHTML = html;
+        this.modalContainer.classList.remove('hidden');
+
+        // Set default date to today
+        document.getElementById('loan-date').valueAsDate = new Date();
+
+        document.getElementById('add-loan-form').onsubmit = async (e) => {
+            e.preventDefault();
+            const loan = {
+                end_user: document.getElementById('loan-user').value,
+                currency_code: document.getElementById('loan-currency').value,
+                principal: parseFloat(document.getElementById('loan-principal').value),
+                interest_rate: parseFloat(document.getElementById('loan-rate').value),
+                my_share_pct: parseFloat(document.getElementById('loan-my-share-pct').value),
+                partner_share_pct: parseFloat(document.getElementById('loan-partner-share-pct').value),
+                is_active: true,
+                created_at: new Date(document.getElementById('loan-date').value).toISOString()
+            };
+
+            await Store.addLoan(loan);
+            this.modalContainer.classList.add('hidden');
+            Auth.showToast("New Loan Added");
+            this.renderLoans();
+        };
+    },
+
+    showEditLoanModal(loanId) {
+        const l = Store.data.loans.find(loan => loan.id === loanId);
+        if (!l) return;
+
+        const metrics = this.calculateLoanMetrics(l);
+
+        const html = `
+            <div id="modal-content" class="bg-slate-900 w-full max-w-lg rounded-t-3xl md:rounded-3xl p-8 space-y-6 shadow-2xl border-t border-slate-800 animate-fade-in max-h-[90vh] overflow-y-auto">
+                <div class="flex items-center justify-between">
+                    <h3 class="text-xl font-bold font-orbitron text-sky-400">Edit Loan Portfolio</h3>
+                    <button onclick="document.getElementById('modal-container').classList.add('hidden')" class="text-slate-500 hover:text-slate-300"><i class="fas fa-times text-xl"></i></button>
+                </div>
+                
+                <form id="edit-loan-form" class="space-y-4">
+                    <div class="space-y-1">
+                        <label class="text-xs text-slate-500 ml-1 uppercase tracking-widest font-bold">End User Name</label>
+                        <input type="text" id="edit-loan-user" value="${l.end_user}" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-sky-500 text-lg" required>
+                    </div>
+                    
+                    <div class="grid grid-cols-2 gap-4">
+                        <div class="space-y-1">
+                            <label class="text-xs text-slate-500 ml-1 uppercase tracking-widest font-bold">Status</label>
+                            <select id="edit-loan-status" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-sky-500">
+                                <option value="active" ${l.is_active ? 'selected' : ''}>Active</option>
+                                <option value="closed" ${!l.is_active ? 'selected' : ''}>Closed / Settled</option>
+                            </select>
+                        </div>
+                        <div class="space-y-1">
+                            <label class="text-xs text-slate-500 ml-1 uppercase tracking-widest font-bold">Interest Rate (%)</label>
+                            <input type="number" step="0.01" id="edit-loan-rate" value="${l.interest_rate}" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-sky-500 font-orbitron" required>
+                        </div>
+                    </div>
+
+                    <div class="space-y-1">
+                        <label class="text-xs text-slate-500 ml-1 uppercase tracking-widest font-bold">Principal Amount</label>
+                        <input type="number" step="0.001" id="edit-loan-principal" value="${l.principal}" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-sky-500 font-orbitron text-xl text-sky-400" required>
+                    </div>
+
+                    <div class="space-y-1">
+                        <label class="text-xs text-slate-500 ml-1 uppercase tracking-widest font-bold">Received Date</label>
+                        <input type="date" id="edit-loan-date" value="${new Date(l.created_at).toISOString().split('T')[0]}" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-sky-500 font-orbitron text-slate-100" required>
+                    </div>
+
+                    <div class="p-4 bg-slate-950/50 rounded-2xl border border-slate-800 space-y-4">
+                        <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+                            <span class="text-[10px] text-slate-500 uppercase tracking-widest font-bold">Split Interest By</span>
+                            <div class="flex bg-slate-900 p-1 rounded-lg">
+                                <button type="button" id="edit-mode-pct" onclick="window.AppLogic.toggleShareMode('pct', true)" class="px-3 py-1 text-[10px] font-bold rounded-md bg-sky-500 text-slate-950 transition-all">Percentage</button>
+                                <button type="button" id="edit-mode-amt" onclick="window.AppLogic.toggleShareMode('amt', true)" class="px-3 py-1 text-[10px] font-bold rounded-md text-slate-400 hover:text-slate-100 transition-all">Amount</button>
+                            </div>
+                        </div>
+
+                        <!-- Percentage Inputs -->
+                        <div id="edit-share-pct-inputs" class="grid grid-cols-2 gap-4">
+                            <div class="space-y-1">
+                                <label class="text-[10px] text-slate-500 uppercase tracking-widest">My Share %</label>
+                                <input type="number" id="edit-loan-my-share-pct" value="${l.my_share_pct || 25}" class="w-full bg-transparent border-none p-0 focus:outline-none font-orbitron text-sky-400">
+                            </div>
+                            <div class="space-y-1 text-right">
+                                <label class="text-[10px] text-slate-500 uppercase tracking-widest">Partner Share %</label>
+                                <input type="number" id="edit-loan-partner-share-pct" value="${l.partner_share_pct || 75}" class="w-full bg-transparent border-none p-0 focus:outline-none font-orbitron text-slate-400 text-right">
+                            </div>
+                        </div>
+
+                        <!-- Amount Inputs (Hidden by default) -->
+                        <div id="edit-share-amt-inputs" class="grid grid-cols-2 gap-4 hidden">
+                            <div class="space-y-1 border-r border-slate-800 pr-4">
+                                <label class="text-[10px] text-slate-500 uppercase tracking-widest">My Amount</label>
+                                <input type="number" step="0.001" id="edit-loan-my-amt" value="${(metrics.renjuShare).toFixed(3)}" oninput="window.AppLogic.calculateFromAmounts(true)" class="w-full bg-transparent border-none p-0 focus:outline-none font-orbitron text-sky-400">
+                            </div>
+                            <div class="space-y-1 pl-4 text-right">
+                                <label class="text-[10px] text-slate-500 uppercase tracking-widest">Partner Amount</label>
+                                <input type="number" step="0.001" id="edit-loan-partner-amt" value="${(metrics.partner_share).toFixed(3)}" oninput="window.AppLogic.calculateFromAmounts(true)" class="w-full bg-transparent border-none p-0 focus:outline-none font-orbitron text-slate-400 text-right">
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="flex space-x-3 pt-4">
+                        <button type="button" onclick="document.getElementById('modal-container').classList.add('hidden')" class="flex-1 bg-slate-800 text-slate-400 py-4 rounded-xl font-bold hover:bg-slate-700 transition-all">Cancel</button>
+                        <button type="submit" class="flex-1 bg-sky-500 text-slate-950 py-4 rounded-xl font-bold shadow-lg shadow-sky-500/20 hover:bg-sky-400 active:scale-95 transition-all">Save Changes</button>
+                    </div>
+                </form>
+            </div>
+        `;
+
+        this.modalContainer.innerHTML = html;
+        this.modalContainer.classList.remove('hidden');
+
+        document.getElementById('edit-loan-form').onsubmit = async (e) => {
+            e.preventDefault();
+            const updated = {
+                end_user: document.getElementById('edit-loan-user').value,
+                is_active: document.getElementById('edit-loan-status').value === 'active',
+                principal: parseFloat(document.getElementById('edit-loan-principal').value),
+                interest_rate: parseFloat(document.getElementById('edit-loan-rate').value),
+                my_share_pct: parseFloat(document.getElementById('edit-loan-my-share-pct').value),
+                partner_share_pct: parseFloat(document.getElementById('edit-loan-partner-share-pct').value),
+                created_at: new Date(document.getElementById('edit-loan-date').value).toISOString()
+            };
+
+            await Store.updateLoan(loanId, updated);
+            this.modalContainer.classList.add('hidden');
+            Auth.showToast("Loan Updated");
+            this.renderLoans();
+        };
+    },
+
+    toggleShareMode(mode, isEdit = false) {
+        const prefix = isEdit ? 'edit-' : '';
+        const pctBtn = document.getElementById(prefix + 'mode-pct');
+        const amtBtn = document.getElementById(prefix + 'mode-amt');
+        const pctContainer = document.getElementById(prefix + 'share-pct-inputs');
+        const amtContainer = document.getElementById(prefix + 'share-amt-inputs');
+
+        if (mode === 'pct') {
+            pctBtn.classList.add('bg-sky-500', 'text-slate-950');
+            pctBtn.classList.remove('text-slate-400');
+            amtBtn.classList.add('text-slate-400');
+            amtBtn.classList.remove('bg-sky-500', 'text-slate-950');
+            pctContainer.classList.remove('hidden');
+            amtContainer.classList.add('hidden');
+        } else {
+            amtBtn.classList.add('bg-sky-500', 'text-slate-950');
+            amtBtn.classList.remove('text-slate-400');
+            pctBtn.classList.add('text-slate-400');
+            pctBtn.classList.remove('bg-sky-500', 'text-slate-950');
+            amtContainer.classList.remove('hidden');
+            pctContainer.classList.add('hidden');
+        }
+    },
+
+    calculateFromAmounts(isEdit = false) {
+        const prefix = isEdit ? 'edit-' : '';
+        const principal = parseFloat(document.getElementById(prefix + 'loan-principal')?.value || document.getElementById('loan-principal')?.value);
+        const myAmt = parseFloat(document.getElementById(prefix + 'loan-my-amt').value || 0);
+        const partnerAmt = parseFloat(document.getElementById(prefix + 'loan-partner-amt').value || 0);
+
+        if (principal && (myAmt || partnerAmt)) {
+            const totalInterest = myAmt + partnerAmt;
+            const rate = (totalInterest / principal) * 100;
+            const myPct = (myAmt / totalInterest) * 100;
+            const partnerPct = (partnerAmt / totalInterest) * 100;
+
+            document.getElementById(prefix + 'loan-rate').value = rate.toFixed(4);
+            document.getElementById(prefix + 'loan-my-share-pct').value = myPct.toFixed(4);
+            document.getElementById(prefix + 'loan-partner-share-pct').value = partnerPct.toFixed(4);
+        }
+    },
+
+    renderRemindersWidget() {
+        const container = document.getElementById('loan-reminders-container');
+        if (!container) return;
+
+        const now = new Date();
+        const activeLoans = Store.data.loans.filter(l => l.is_active);
+        
+        const overdue = [];
+        const upcoming = [];
+
+        activeLoans.forEach(l => {
+            const startDate = new Date(l.created_at);
+            const dueDay = startDate.getDate();
+            const todayDay = now.getDate();
+            
+            // Consider only the current month (ignore historical backlog)
+            const monthYear = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+            const isPaid = Store.data.loanPayments.some(p => p.loan_id === l.id && p.month_year === monthYear);
+            
+            if (!isPaid) {
+                const isTodayOverdue = todayDay > dueDay;
+                
+                if (isTodayOverdue) {
+                    overdue.push({
+                        name: l.end_user,
+                        date: `${dueDay} ${now.toLocaleDateString('en-US', { month: 'short', year: '2-digit' })}`
+                    });
+                } else {
+                    const daysUntil = dueDay - todayDay;
+                    // User Requirement: Show upcoming payments before 2 days (<= 2 days away)
+                    if (daysUntil >= 0 && daysUntil <= 2) {
+                        upcoming.push({
+                            name: l.end_user,
+                            date: `${dueDay} ${now.toLocaleDateString('en-US', { month: 'short' })}`,
+                            daysUntil
+                        });
+                    }
+                }
+            }
+        });
+
+        if (overdue.length === 0 && upcoming.length === 0) {
+            container.innerHTML = '';
+            container.classList.add('hidden');
+            return;
+        }
+
+        container.classList.remove('hidden');
+
+        // User Requirement: Show only 2 upcoming payments
+        const limitedUpcoming = upcoming.sort((a, b) => a.daysUntil - b.daysUntil).slice(0, 2);
+
+        let html = `<div class="grid grid-cols-1 md:grid-cols-2 gap-4 animate-fade-in mb-6">`;
+
+        // 1. Overdue Section
+        if (overdue.length > 0) {
+            html += `
+                <div class="bg-rose-500/10 border border-rose-500/30 rounded-2xl p-4 flex flex-col space-y-3">
+                    <div class="flex items-center space-x-2 text-rose-500">
+                        <i class="fas fa-exclamation-circle text-sm"></i>
+                        <span class="text-[10px] uppercase font-black tracking-widest">Overdue Payments</span>
+                    </div>
+                    <div class="space-y-2 max-h-32 overflow-y-auto no-scrollbar">
+                        ${overdue.map(o => `
+                            <div class="flex justify-between items-center text-sm py-1 border-b border-rose-500/10 last:border-0">
+                                <span class="font-bold text-rose-200">${o.name}</span>
+                                <span class="text-[10px] font-orbitron text-rose-400/70">${o.date}</span>
+                            </div>
+                        `).join('')}
+                    </div>
+                </div>
+            `;
+        }
+
+        // 2. Upcoming Section (Limited to 2)
+        if (limitedUpcoming.length > 0) {
+            html += `
+                <div class="bg-amber-500/10 border border-amber-500/30 rounded-2xl p-4 flex flex-col space-y-3">
+                    <div class="flex items-center space-x-2 text-amber-500">
+                        <i class="fas fa-clock text-sm"></i>
+                        <span class="text-[10px] uppercase font-black tracking-widest">Upcoming Interest (Next 2 Days)</span>
+                    </div>
+                    <div class="space-y-2">
+                        ${limitedUpcoming.map(u => `
+                            <div class="flex justify-between items-center text-sm py-1 border-b border-amber-500/10 last:border-0">
+                                <span class="font-bold text-amber-100">${u.name}</span>
+                                <span class="text-[10px] font-orbitron text-amber-400/80">${u.date}</span>
+                            </div>
+                        `).join('')}
+                    </div>
+                </div>
+            `;
+        }
+
+        html += `</div>`;
+        container.innerHTML = html;
+    },
+
+    async handleQuickCollect(loanId) {
+        const l = Store.data.loans.find(loan => loan.id === loanId);
+        if (!l) return;
+
+        // Find oldest unpaid month
+        const now = new Date();
+        const startDate = new Date(l.created_at);
+        let iter = new Date(startDate.getFullYear(), startDate.getMonth(), 1);
+        const currentMonthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+        
+        let oldestUnpaid = null;
+        while (iter <= currentMonthStart) {
+            const monthYear = `${iter.getFullYear()}-${String(iter.getMonth() + 1).padStart(2, '0')}`;
+            const isPaid = Store.data.loanPayments.some(p => p.loan_id === l.id && p.month_year === monthYear);
+            if (!isPaid) {
+                oldestUnpaid = monthYear;
+                break;
+            }
+            iter.setMonth(iter.setMonth() + 1);
+        }
+
+        if (oldestUnpaid) {
+            const monthText = new Date(oldestUnpaid + "-01").toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+            if (confirm(`Collect interest for ${l.end_user} - ${monthText}?`)) {
+                await Store.markLoanPaid(loanId, oldestUnpaid);
+                Auth.showToast(`Collected: ${monthText}`);
+                this.renderLoans();
+            }
+        }
+    },
+
+    showLoanStatement(loanId) {
+        const loan = Store.data.loans.find(l => l.id === loanId);
+        if (!loan) return;
+
+        const payments = Store.data.loanPayments
+            .filter(p => p.loan_id === loanId)
+            .sort((a, b) => new Date(b.month_year) - new Date(a.month_year));
+
+        const metrics = this.calculateLoanMetrics(loan);
+
+        const html = `
+            <div id="modal-content" class="bg-slate-950 w-full max-w-2xl rounded-t-3xl md:rounded-3xl shadow-2xl border border-slate-800 animate-fade-in flex flex-col max-h-[90vh]">
+                <!-- Header -->
+                <div class="p-6 border-b border-slate-800 flex items-center justify-between bg-slate-900/50">
+                    <div>
+                        <h3 class="text-2xl font-bold font-orbitron text-sky-400">${loan.end_user}</h3>
+                        <p class="text-xs text-slate-500 uppercase tracking-widest">Loan Summary Statement</p>
+                    </div>
+                    <button onclick="document.getElementById('modal-container').classList.add('hidden')" class="text-slate-500 hover:text-slate-300">
+                        <i class="fas fa-times text-xl"></i>
+                    </button>
+                </div>
+
+                <!-- Info Grid -->
+                <div class="grid grid-cols-2 lg:grid-cols-5 gap-4 p-6 bg-slate-900/30">
+                    <div class="space-y-1">
+                        <span class="text-[10px] text-slate-500 uppercase tracking-widest">Initial Date</span>
+                        <div class="font-orbitron font-bold text-slate-100">${new Date(loan.created_at).toLocaleDateString()}</div>
+                    </div>
+                    <div class="space-y-1">
+                        <span class="text-[10px] text-slate-500 uppercase tracking-widest">Principal</span>
+                        <div class="font-orbitron font-bold text-slate-100">${this.formatCurrency(loan.principal, loan.currency_code)}</div>
+                    </div>
+                    <div class="space-y-1">
+                        <span class="text-[10px] text-slate-500 uppercase tracking-widest">Tot. Monthly Int (${loan.interest_rate}%)</span>
+                        <div class="font-orbitron font-bold text-emerald-400">${this.formatCurrency(metrics.monthlyTotalInterest, loan.currency_code)}</div>
+                    </div>
+                    <div class="space-y-1">
+                        <span class="text-[10px] text-slate-500 uppercase tracking-widest">My Share (${loan.my_share_pct}%)</span>
+                        <div class="font-orbitron font-bold text-sky-400">${this.formatCurrency(metrics.renjuShare, loan.currency_code)}</div>
+                    </div>
+                    <div class="space-y-1">
+                        <span class="text-[10px] text-slate-500 uppercase tracking-widest">Partner Share (${loan.partner_share_pct}%)</span>
+                        <div class="font-orbitron font-bold text-slate-400">${this.formatCurrency(metrics.partner_share, loan.currency_code)}</div>
+                    </div>
+                </div>
+
+                <!-- History List -->
+                <div class="flex-1 overflow-y-auto p-6 space-y-4">
+                    <h4 class="text-xs font-bold text-slate-100 uppercase tracking-widest mb-2 border-b border-slate-800 pb-2">Interest Payment History</h4>
+                    
+                    ${payments.length === 0 ? `
+                        <div class="text-center py-10 text-slate-500 italic">No payments recorded yet.</div>
+                    ` : payments.map(p => {
+                        const paidDate = new Date(p.created_at);
+                        const monthName = new Date(p.month_year + "-01").toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+                        
+                        return `
+                            <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 flex items-center justify-between group">
+                                <div class="flex items-center space-x-4">
+                                    <div class="w-10 h-10 rounded-full bg-emerald-500/10 flex items-center justify-center text-emerald-400">
+                                        <i class="fas fa-check-double text-sm"></i>
+                                    </div>
+                                    <div>
+                                        <div class="font-bold text-slate-200">${monthName} Interest</div>
+                                        <div class="text-[10px] text-slate-500">Paid on ${paidDate.toLocaleDateString()} at ${paidDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>
+                                    </div>
+                                </div>
+                                <div class="text-right">
+                                    <div class="font-orbitron font-bold text-emerald-400">+${this.formatCurrency(metrics.monthlyTotalInterest, loan.currency_code)}</div>
+                                    <div class="text-[9px] text-slate-500 uppercase tracking-tighter">Status: Handed Over</div>
+                                </div>
+                            </div>
+                        `;
+                    }).join('')}
+                </div>
+
+                <!-- Footer Action -->
+                <div class="p-6 border-t border-slate-800 bg-slate-900/50 flex justify-end">
+                    <button onclick="window.print()" class="bg-slate-800 text-slate-300 px-6 py-2 rounded-xl text-xs font-bold hover:bg-slate-700 transition-all flex items-center space-x-2">
+                        <i class="fas fa-print"></i> <span>Print Statement</span>
+                    </button>
+                </div>
+            </div>
+        `;
+
+        this.modalContainer.innerHTML = html;
+        this.modalContainer.classList.remove('hidden');
     }
-};
+}
 
 window.AppLogic = AppLogic;
