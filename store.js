@@ -439,8 +439,18 @@ const Store = {
         loan.id = crypto.randomUUID();
         if (!loan.created_at) loan.created_at = new Date().toISOString();
         if (loan.is_active === undefined) loan.is_active = true;
-        if (loan.partner_share_pct === undefined) loan.partner_share_pct = 75;
-        if (loan.my_share_pct === undefined) loan.my_share_pct = 25;
+        if (loan.category === undefined) loan.category = 'personal';
+        
+        // Defaults for Personal category
+        if (loan.category === 'personal') {
+            if (loan.partner_share_pct === undefined) loan.partner_share_pct = 75;
+            if (loan.my_share_pct === undefined) loan.my_share_pct = 25;
+        } else {
+            // Will Tec defaults (100% to lender)
+            loan.partner_share_pct = 100;
+            loan.my_share_pct = 0;
+            loan.currency_code = 'KWD'; // Strict requirement
+        }
         
         this.data.loans.push(loan);
         await this.save();

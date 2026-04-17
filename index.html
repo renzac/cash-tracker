@@ -361,12 +361,20 @@
                                 <span id="kwd-total-interest" class="font-bold text-emerald-400">0.000</span>
                             </div>
                             <div class="mt-1 flex justify-between text-xs">
-                                <span class="text-slate-500">My Share (25%)</span>
+                                <span class="text-slate-500" id="kwd-my-share-label">My Share (25%)</span>
                                 <span id="kwd-my-share" class="font-bold text-sky-400 font-orbitron">0.000</span>
                             </div>
                             <div class="mt-1 flex justify-between text-xs">
-                                <span class="text-slate-500">Partner Share</span>
+                                <span class="text-slate-500" id="kwd-partner-share-label">Partner Share</span>
                                 <span id="kwd-partner-share" class="font-bold text-slate-300 font-orbitron">0.000</span>
+                            </div>
+
+                            <!-- New Creditor Breakdown (Will Tec Only) -->
+                            <div id="kwd-creditor-breakdown" class="mt-4 pt-4 border-t border-slate-800 space-y-2 hidden">
+                                <h5 class="text-[9px] font-bold text-slate-500 uppercase tracking-widest">Creditor Breakdown</h5>
+                                <div id="creditor-breakdown-list" class="space-y-1">
+                                    <!-- Dynamic content -->
+                                </div>
                             </div>
                         </div>
                         <div id="inr-portfolio-card" class="bg-slate-900 border border-slate-800 rounded-3xl p-6 shadow-xl relative overflow-hidden group">
@@ -378,13 +386,27 @@
                                 <span id="inr-total-interest" class="font-bold text-emerald-400">0.00</span>
                             </div>
                             <div class="mt-1 flex justify-between text-xs">
-                                <span class="text-slate-500">My Share (25%)</span>
+                                <span class="text-slate-500" id="inr-my-share-label">My Share (25%)</span>
                                 <span id="inr-my-share" class="font-bold text-orange-400 font-orbitron">0.00</span>
                             </div>
                             <div class="mt-1 flex justify-between text-xs">
-                                <span class="text-slate-500">Partner Share</span>
+                                <span class="text-slate-500" id="inr-partner-share-label">Partner Share</span>
                                 <span id="inr-partner-share" class="font-bold text-slate-300 font-orbitron">0.00</span>
                             </div>
+                        </div>
+                    </div>
+
+                    <!-- Category Switcher -->
+                    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-800 pb-4">
+                        <div class="flex items-center space-x-2">
+                            <button id="cat-personal" onclick="window.AppLogic.toggleLoanCategory('personal')" class="px-6 py-2 rounded-xl text-sm font-bold transition-all bg-sky-500 text-slate-950">Personal Loans</button>
+                            <button id="cat-willtec" onclick="window.AppLogic.toggleLoanCategory('will_tec')" class="px-6 py-2 rounded-xl text-sm font-bold transition-all text-slate-400 hover:text-slate-100">Will Tec Loans</button>
+                        </div>
+
+                        <!-- Will Tec Specific View Toggle -->
+                        <div id="will-tec-view-controls" class="flex items-center bg-slate-900 border border-slate-800 rounded-xl p-1 hidden">
+                            <button id="view-mode-list" onclick="window.AppLogic.toggleWillTecViewMode('list')" class="px-4 py-1.5 rounded-lg text-xs font-bold transition-all bg-sky-500 text-slate-950">Transaction List</button>
+                            <button id="view-mode-summary" onclick="window.AppLogic.toggleWillTecViewMode('summary')" class="px-4 py-1.5 rounded-lg text-xs font-bold transition-all text-slate-400 hover:text-slate-100">Creditor Summary</button>
                         </div>
                     </div>
 
@@ -406,7 +428,12 @@
 
                     <!-- Loan Cards List -->
                     <div id="loan-list" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                        <!-- JS Dynamic Content -->
+                        <!-- JS Dynamic Content (Card Grid) -->
+                    </div>
+
+                    <!-- Loan Summary View (Table Based) -->
+                    <div id="loan-summary-view" class="hidden animate-fade-in">
+                        <!-- JS Dynamic Content (Grouped Table) -->
                     </div>
                 </div>
 

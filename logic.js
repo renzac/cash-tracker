@@ -3,6 +3,9 @@ const AppLogic = {
     viewTitle: document.getElementById('current-view-title'),
     displayDate: document.getElementById('display-date'),
     modalContainer: document.getElementById('modal-container'),
+    loanCategoryFilter: 'personal',
+    loanFilterStatus: 'active',
+    willTecViewMode: 'list',
 
     async init() {
         // Auto-recalculate on startup to fix any legacy sign issues
@@ -1728,6 +1731,22 @@ const AppLogic = {
 
     // --- LOAN PORTFOLIO LOGIC ---
     loanFilterStatus: 'active',
+    loanCategoryFilter: 'personal',
+
+    toggleLoanCategory(category) {
+        this.loanCategoryFilter = category;
+        const personalBtn = document.getElementById('cat-personal');
+        const willtecBtn = document.getElementById('cat-willtec');
+
+        if (category === 'personal') {
+            personalBtn.className = 'px-6 py-2 rounded-xl text-sm font-bold transition-all bg-sky-500 text-slate-950';
+            willtecBtn.className = 'px-6 py-2 rounded-xl text-sm font-bold transition-all text-slate-400 hover:text-slate-100';
+        } else {
+            willtecBtn.className = 'px-6 py-2 rounded-xl text-sm font-bold transition-all bg-sky-500 text-slate-950';
+            personalBtn.className = 'px-6 py-2 rounded-xl text-sm font-bold transition-all text-slate-400 hover:text-slate-100';
+        }
+        this.renderLoans();
+    },
 
     toggleLoanFilter(status) {
         this.loanFilterStatus = status;
@@ -1757,13 +1776,21 @@ const AppLogic = {
         const principal = parseFloat(loan.principal) || 0;
         const rate = parseFloat(loan.interest_rate) || 0;
         const monthlyTotalInterest = (principal * rate) / 100;
-        const renjuShare = monthlyTotalInterest * (loan.my_share_pct / 100);
-        const partnerShare = monthlyTotalInterest * (loan.partner_share_pct / 100);
+
+        let renjuShare, partnerShare;
+        
+        if (loan.category === 'will_tec') {
+            renjuShare = 0;
+            partnerShare = monthlyTotalInterest;
+        } else {
+            renjuShare = monthlyTotalInterest * ((loan.my_share_pct || 25) / 100);
+            partnerShare = monthlyTotalInterest * ((loan.partner_share_pct || 75) / 100);
+        }
 
         return {
             monthlyTotalInterest,
             renjuShare,
-            partner_share: partnerShare // for backward compatibility if needed
+            partner_share: partnerShare
         };
     },
 
@@ -1791,6 +1818,9 @@ const AppLogic = {
         // Apply Active/Closed Filter
         loans = loans.filter(l => this.loanFilterStatus === 'active' ? l.is_active : !l.is_active);
 
+        // Apply Category Filter (Default to personal for legacy)
+        loans = loans.filter(l => (l.category || 'personal') === this.loanCategoryFilter);
+
         // Apply Search Filter
         if (searchQuery) {
             loans = loans.filter(l => l.end_user.toLowerCase().includes(searchQuery));
@@ -1807,7 +1837,7 @@ const AppLogic = {
         let inrMyShare = 0;
         let inrPartnerShare = 0;
 
-        const activeLoans = Store.data.loans.filter(l => l.is_active);
+        const activeLoans = Store.data.loans.filter(l => l.is_active && (l.category || 'personal') === this.loanCategoryFilter);
         activeLoans.forEach(l => {
             const metrics = this.calculateLoanMetrics(l);
             if (l.currency_code === 'KWD') {
@@ -1833,6 +1863,61 @@ const AppLogic = {
         document.getElementById('inr-total-interest').textContent = this.formatCurrency(inrTotalInterest, 'INR');
         document.getElementById('inr-my-share').textContent = this.formatCurrency(inrMyShare, 'INR');
         document.getElementById('inr-partner-share').textContent = this.formatCurrency(inrPartnerShare, 'INR');
+
+        // Dynamic Labels & Visibility
+        const isWillTec = this.loanCategoryFilter === 'will_tec';
+        document.getElementById('inr-portfolio-card').classList.toggle('hidden', isWillTec);
+        
+        const kwdMyLabel = document.getElementById('kwd-my-share-label');
+        const kwdPartnerLabel = document.getElementById('kwd-partner-share-label');
+        const inrMyLabel = document.getElementById('inr-my-share-label');
+        const inrPartnerLabel = document.getElementById('inr-partner-share-label');
+
+        if (isWillTec) {
+            kwdMyLabel.parentElement.classList.add('hidden');
+            kwdPartnerLabel.parentElement.classList.add('hidden');
+            document.getElementById('will-tec-view-controls').classList.remove('hidden');
+            
+            // Populate Creditor Breakdown Table in KWD Card
+            const breakdownContainer = document.getElementById('kwd-creditor-breakdown');
+            const breakdownList = document.getElementById('creditor-breakdown-list');
+            breakdownContainer.classList.remove('hidden');
+            
+            const grouped = this.getGroupedCreditorData(loans);
+            breakdownList.innerHTML = grouped.map(g => `
+                <div class="flex justify-between items-center text-[10px] py-1 border-b border-white/5 last:border-0 hover:bg-white/5 px-1 rounded transition-colors cursor-pointer" onclick="window.AppLogic.focusCreditor('${g.name}')">
+                    <span class="text-slate-200 font-bold">${g.name}</span>
+                    <div class="space-x-4">
+                        <span class="text-slate-500">${this.formatCurrency(g.totalPrincipal, 'KWD')}</span>
+                        <span class="text-emerald-400 font-bold">(${this.formatCurrency(g.totalInterest, 'KWD')})</span>
+                    </div>
+                </div>
+            `).join('');
+            
+        } else {
+            kwdMyLabel.parentElement.classList.remove('hidden');
+            kwdPartnerLabel.parentElement.classList.remove('hidden');
+            document.getElementById('will-tec-view-controls').classList.add('hidden');
+            document.getElementById('kwd-creditor-breakdown').classList.add('hidden');
+            
+            kwdMyLabel.textContent = "My Share (25%)";
+            kwdPartnerLabel.textContent = "Partner Share";
+            inrMyLabel.textContent = "My Share (25%)";
+            inrPartnerLabel.textContent = "Partner Share";
+        }
+
+        const listView = document.getElementById('loan-list');
+        const summaryView = document.getElementById('loan-summary-view');
+
+        if (isWillTec && this.willTecViewMode === 'summary') {
+            listView.classList.add('hidden');
+            summaryView.classList.remove('hidden');
+            this.renderCreditorSummaryView(loans);
+            return;
+        } else {
+            listView.classList.remove('hidden');
+            summaryView.classList.add('hidden');
+        }
 
         if (loans.length === 0) {
             list.innerHTML = `<div class="col-span-full text-center py-20 text-slate-500 italic">No ${this.loanFilterStatus} loans found</div>`;
@@ -1879,7 +1964,7 @@ const AppLogic = {
                             <div>
                                 <h3 class="text-xl font-bold text-slate-100">${l.end_user}${statusBadge}</h3>
                                 <div class="text-[10px] text-slate-500 uppercase tracking-widest mt-1">
-                                    ${l.currency_code} Portfolio | Received: ${new Date(l.created_at).toLocaleDateString()}
+                                    ${l.currency_code} Portfolio | ${l.category === 'will_tec' ? 'Creditor' : 'Personal'} | Received: ${new Date(l.created_at).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }).replace(/ /g, '/')}
                                 </div>
                             </div>
                             <div class="px-3 py-1 rounded-full text-[10px] font-bold uppercase ${l.is_active ? 'bg-emerald-500/10 text-emerald-500' : 'bg-rose-500/10 text-rose-500'}">
@@ -1896,6 +1981,7 @@ const AppLogic = {
                                 <span class="text-slate-500">Interest (${l.interest_rate}%)</span>
                                 <span class="font-bold text-emerald-400">${this.formatCurrency(metrics.monthlyTotalInterest, l.currency_code)}</span>
                             </div>
+                            ${l.category === 'will_tec' ? '' : `
                             <div class="flex justify-between items-center text-[10px] text-slate-400 px-2 py-1 bg-slate-800/20 rounded-lg border border-white/5">
                                 <div class="flex flex-col">
                                     <span class="text-[8px] uppercase tracking-tighter opacity-50">My Share (${l.my_share_pct}%)</span>
@@ -1906,13 +1992,14 @@ const AppLogic = {
                                     <span class="font-orbitron text-slate-300">${this.formatCurrency(metrics.partner_share, l.currency_code)}</span>
                                 </div>
                             </div>
+                            `}
                         </div>
                     </div>
 
                     <div class="mt-8 space-y-4">
                         <div class="flex items-center justify-between text-[10px] text-slate-500 uppercase tracking-widest">
                             <span>Next ${isPaid ? 'Payment' : 'Due'}</span>
-                            <span class="${!isPaid && now.getDate() > new Date(l.created_at).getDate() ? 'text-rose-500 font-bold' : ''}">${nextDate ? nextDate.toLocaleDateString('en-US', { day: 'numeric', month: 'short' }) : 'N/A'}</span>
+                            <span class="${!isPaid && now.getDate() > new Date(l.created_at).getDate() ? 'text-rose-500 font-bold' : ''}">${nextDate ? nextDate.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }).replace(/ /g, '/') : 'N/A'}</span>
                         </div>
                         
                         <div class="flex space-x-2">
@@ -1969,6 +2056,99 @@ const AppLogic = {
         }
     },
 
+    renderCreditorSummaryView(loans) {
+        const container = document.getElementById('loan-summary-view');
+        if (!container) return;
+
+        const grouped = this.getGroupedCreditorData(loans);
+        
+        if (grouped.length === 0) {
+            container.innerHTML = `<div class="text-center py-20 text-slate-500 italic">No summary data available</div>`;
+            return;
+        }
+
+        let html = `
+            <div class="overflow-x-auto bg-slate-900 border border-slate-800 rounded-3xl p-6 shadow-2xl">
+                <table class="w-full text-left">
+                    <thead>
+                        <tr class="text-[10px] uppercase tracking-widest text-slate-500 border-b border-white/5">
+                            <th class="pb-4 pl-4">Creditor Name</th>
+                            <th class="pb-4">Loans</th>
+                            <th class="pb-4">Total Principal</th>
+                            <th class="pb-4 text-emerald-400">Monthly Int.</th>
+                            <th class="pb-4 text-right pr-4">Latest Date</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-white/5">
+        `;
+
+        grouped.forEach(g => {
+            const dateStr = g.latestDate.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }).replace(/ /g, '/');
+            html += `
+                <tr class="group hover:bg-white/5 transition-all cursor-pointer" onclick="this.nextElementSibling.classList.toggle('hidden')">
+                    <td class="py-5 pl-4 flex items-center space-x-3">
+                        <div class="w-8 h-8 rounded-full bg-sky-500/10 flex items-center justify-center text-sky-400 font-bold text-xs uppercase">
+                            ${g.name.charAt(0)}
+                        </div>
+                        <span class="font-bold text-slate-200">${g.name}</span>
+                    </td>
+                    <td class="py-5">
+                        <span class="px-2 py-0.5 rounded-full bg-slate-800 text-slate-400 text-[10px] font-bold">${g.loans.length} Loans</span>
+                    </td>
+                    <td class="py-5 font-orbitron font-bold text-slate-200">
+                        ${this.formatCurrency(g.totalPrincipal, 'KWD')}
+                    </td>
+                    <td class="py-5 font-orbitron font-bold text-emerald-400">
+                        ${this.formatCurrency(g.totalInterest, 'KWD')}
+                    </td>
+                    <td class="py-5 text-right pr-4 text-xs font-orbitron text-slate-500">
+                        ${dateStr}
+                    </td>
+                </tr>
+                <tr class="hidden bg-slate-950/50">
+                    <td colspan="5" class="p-6">
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            ${g.loans.map(l => {
+                                const metrics = this.calculateLoanMetrics(l);
+                                const isPaid = Store.data.loanPayments.some(p => p.loan_id === l.id && p.month_year === `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}`);
+                                return `
+                                    <div class="p-4 rounded-2xl border border-slate-800 bg-slate-900 shadow-lg flex justify-between items-center group/card">
+                                        <div>
+                                            <div class="text-[10px] text-slate-500 uppercase font-black">${new Date(l.created_at).toLocaleDateString()}</div>
+                                            <div class="font-bold text-slate-200">${this.formatCurrency(l.principal, l.currency_code)} @ ${l.interest_rate}%</div>
+                                            <div class="text-emerald-400 font-bold text-xs">${this.formatCurrency(metrics.monthlyTotalInterest, l.currency_code)} / mo</div>
+                                        </div>
+                                        <div class="flex space-x-1">
+                                            <button onclick="event.stopPropagation(); window.AppLogic.showLoanStatement('${l.id}')" class="p-2 rounded-lg bg-slate-800 text-slate-400 hover:text-emerald-400"><i class="fas fa-file-invoice-dollar text-xs"></i></button>
+                                            <button onclick="event.stopPropagation(); window.AppLogic.showEditLoanModal('${l.id}')" class="p-2 rounded-lg bg-slate-800 text-slate-400 hover:text-sky-400"><i class="fas fa-edit text-xs"></i></button>
+                                        </div>
+                                    </div>
+                                `;
+                            }).join('')}
+                        </div>
+                        <div class="mt-4 flex justify-end">
+                            <button onclick="window.AppLogic.focusCreditor('${g.name}')" class="text-[10px] text-sky-400 hover:text-sky-300 font-bold uppercase tracking-widest border-b border-sky-400/30">View detailed list &rarr;</button>
+                        </div>
+                    </td>
+                </tr>
+            `;
+        });
+
+        html += `
+                    </tbody>
+                </table>
+            </div>
+        `;
+
+        container.innerHTML = html;
+    },
+
+    focusCreditor(name) {
+        document.getElementById('loan-search').value = name;
+        this.willTecViewMode = 'list';
+        this.toggleWillTecViewMode('list');
+    },
+
     showAddLoanModal() {
         const html = `
             <div id="modal-content" class="bg-slate-900 w-full max-w-lg rounded-t-3xl md:rounded-3xl p-8 space-y-6 shadow-2xl border-t border-slate-800 animate-fade-in max-h-[90vh] overflow-y-auto">
@@ -1979,12 +2159,20 @@ const AppLogic = {
                 
                 <form id="add-loan-form" class="space-y-4">
                     <div class="space-y-1">
-                        <label class="text-xs text-slate-500 ml-1 uppercase tracking-widest font-bold">End User Name</label>
+                        <label id="loan-user-label" class="text-xs text-slate-500 ml-1 uppercase tracking-widest font-bold">End User Name</label>
                         <input type="text" id="loan-user" placeholder="e.g. Subin" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-emerald-500 text-lg" required>
                     </div>
                     
+                    <div class="space-y-1">
+                        <label class="text-xs text-slate-500 ml-1 uppercase tracking-widest font-bold">Loan Category</label>
+                        <select id="loan-category" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-emerald-500" onchange="window.AppLogic.onLoanCategoryChange()">
+                            <option value="personal">Personal Loan</option>
+                            <option value="will_tec">Will Tec Loan</option>
+                        </select>
+                    </div>
+
                     <div class="grid grid-cols-2 gap-4">
-                        <div class="space-y-1">
+                        <div class="space-y-1" id="currency-field-container">
                             <label class="text-xs text-slate-500 ml-1 uppercase tracking-widest font-bold">Currency</label>
                             <select id="loan-currency" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-emerald-500">
                                 <option value="KWD">KWD (KD)</option>
@@ -2007,7 +2195,7 @@ const AppLogic = {
                         <input type="date" id="loan-date" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-emerald-500 font-orbitron text-slate-100" required>
                     </div>
 
-                    <div class="p-4 bg-slate-950/50 rounded-2xl border border-slate-800 space-y-4">
+                    <div id="share-split-container" class="p-4 bg-slate-950/50 rounded-2xl border border-slate-800 space-y-4">
                         <div class="flex items-center justify-between border-b border-slate-800 pb-3">
                             <span class="text-[10px] text-slate-500 uppercase tracking-widest font-bold">Split Interest By</span>
                             <div class="flex bg-slate-900 p-1 rounded-lg">
@@ -2059,6 +2247,7 @@ const AppLogic = {
             e.preventDefault();
             const loan = {
                 end_user: document.getElementById('loan-user').value,
+                category: document.getElementById('loan-category').value,
                 currency_code: document.getElementById('loan-currency').value,
                 principal: parseFloat(document.getElementById('loan-principal').value),
                 interest_rate: parseFloat(document.getElementById('loan-rate').value),
@@ -2073,6 +2262,9 @@ const AppLogic = {
             Auth.showToast("New Loan Added");
             this.renderLoans();
         };
+
+        // Initial category state handling
+        this.onLoanCategoryChange();
     },
 
     showEditLoanModal(loanId) {
@@ -2090,11 +2282,26 @@ const AppLogic = {
                 
                 <form id="edit-loan-form" class="space-y-4">
                     <div class="space-y-1">
-                        <label class="text-xs text-slate-500 ml-1 uppercase tracking-widest font-bold">End User Name</label>
+                        <label id="edit-loan-user-label" class="text-xs text-slate-500 ml-1 uppercase tracking-widest font-bold">End User Name</label>
                         <input type="text" id="edit-loan-user" value="${l.end_user}" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-sky-500 text-lg" required>
                     </div>
                     
+                    <div class="space-y-1">
+                        <label class="text-xs text-slate-500 ml-1 uppercase tracking-widest font-bold">Loan Category</label>
+                        <select id="edit-loan-category" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-sky-500" onchange="window.AppLogic.onLoanCategoryChange(true)">
+                            <option value="personal" ${l.category === 'personal' || !l.category ? 'selected' : ''}>Personal Loan</option>
+                            <option value="will_tec" ${l.category === 'will_tec' ? 'selected' : ''}>Will Tec Loan</option>
+                        </select>
+                    </div>
+
                     <div class="grid grid-cols-2 gap-4">
+                        <div class="space-y-1" id="edit-currency-field-container">
+                            <label class="text-xs text-slate-500 ml-1 uppercase tracking-widest font-bold">Currency</label>
+                            <select id="edit-loan-currency" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-sky-500">
+                                <option value="KWD" ${l.currency_code === 'KWD' ? 'selected' : ''}>KWD (KD)</option>
+                                <option value="INR" ${l.currency_code === 'INR' ? 'selected' : ''}>INR (₹)</option>
+                            </select>
+                        </div>
                         <div class="space-y-1">
                             <label class="text-xs text-slate-500 ml-1 uppercase tracking-widest font-bold">Status</label>
                             <select id="edit-loan-status" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-sky-500">
@@ -2102,10 +2309,11 @@ const AppLogic = {
                                 <option value="closed" ${!l.is_active ? 'selected' : ''}>Closed / Settled</option>
                             </select>
                         </div>
-                        <div class="space-y-1">
-                            <label class="text-xs text-slate-500 ml-1 uppercase tracking-widest font-bold">Interest Rate (%)</label>
-                            <input type="number" step="0.01" id="edit-loan-rate" value="${l.interest_rate}" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-sky-500 font-orbitron" required>
-                        </div>
+                    </div>
+
+                    <div class="space-y-1">
+                        <label class="text-xs text-slate-500 ml-1 uppercase tracking-widest font-bold">Interest Rate (%)</label>
+                        <input type="number" step="0.01" id="edit-loan-rate" value="${l.interest_rate}" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-sky-500 font-orbitron" required>
                     </div>
 
                     <div class="space-y-1">
@@ -2118,7 +2326,7 @@ const AppLogic = {
                         <input type="date" id="edit-loan-date" value="${new Date(l.created_at).toISOString().split('T')[0]}" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-sky-500 font-orbitron text-slate-100" required>
                     </div>
 
-                    <div class="p-4 bg-slate-950/50 rounded-2xl border border-slate-800 space-y-4">
+                    <div id="edit-share-split-container" class="p-4 bg-slate-950/50 rounded-2xl border border-slate-800 space-y-4">
                         <div class="flex items-center justify-between border-b border-slate-800 pb-3">
                             <span class="text-[10px] text-slate-500 uppercase tracking-widest font-bold">Split Interest By</span>
                             <div class="flex bg-slate-900 p-1 rounded-lg">
@@ -2163,10 +2371,15 @@ const AppLogic = {
         this.modalContainer.innerHTML = html;
         this.modalContainer.classList.remove('hidden');
 
+        // Initial category state handling
+        this.onLoanCategoryChange(true);
+
         document.getElementById('edit-loan-form').onsubmit = async (e) => {
             e.preventDefault();
             const updated = {
                 end_user: document.getElementById('edit-loan-user').value,
+                category: document.getElementById('edit-loan-category').value,
+                currency_code: document.getElementById('edit-loan-currency').value,
                 is_active: document.getElementById('edit-loan-status').value === 'active',
                 principal: parseFloat(document.getElementById('edit-loan-principal').value),
                 interest_rate: parseFloat(document.getElementById('edit-loan-rate').value),
@@ -2380,7 +2593,7 @@ const AppLogic = {
                 <div class="grid grid-cols-2 lg:grid-cols-5 gap-4 p-6 bg-slate-900/30">
                     <div class="space-y-1">
                         <span class="text-[10px] text-slate-500 uppercase tracking-widest">Initial Date</span>
-                        <div class="font-orbitron font-bold text-slate-100">${new Date(loan.created_at).toLocaleDateString()}</div>
+                        <div class="font-orbitron font-bold text-slate-100">${new Date(loan.created_at).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }).replace(/ /g, '/')}</div>
                     </div>
                     <div class="space-y-1">
                         <span class="text-[10px] text-slate-500 uppercase tracking-widest">Principal</span>
@@ -2390,6 +2603,7 @@ const AppLogic = {
                         <span class="text-[10px] text-slate-500 uppercase tracking-widest">Tot. Monthly Int (${loan.interest_rate}%)</span>
                         <div class="font-orbitron font-bold text-emerald-400">${this.formatCurrency(metrics.monthlyTotalInterest, loan.currency_code)}</div>
                     </div>
+                    ${loan.category === 'will_tec' ? '' : `
                     <div class="space-y-1">
                         <span class="text-[10px] text-slate-500 uppercase tracking-widest">My Share (${loan.my_share_pct}%)</span>
                         <div class="font-orbitron font-bold text-sky-400">${this.formatCurrency(metrics.renjuShare, loan.currency_code)}</div>
@@ -2398,6 +2612,7 @@ const AppLogic = {
                         <span class="text-[10px] text-slate-500 uppercase tracking-widest">Partner Share (${loan.partner_share_pct}%)</span>
                         <div class="font-orbitron font-bold text-slate-400">${this.formatCurrency(metrics.partner_share, loan.currency_code)}</div>
                     </div>
+                    `}
                 </div>
 
                 <!-- History List -->
@@ -2418,7 +2633,7 @@ const AppLogic = {
                                     </div>
                                     <div>
                                         <div class="font-bold text-slate-200">${monthName} Interest</div>
-                                        <div class="text-[10px] text-slate-500">Paid on ${paidDate.toLocaleDateString()} at ${paidDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>
+                                        <div class="text-[10px] text-slate-500">Paid on ${paidDate.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }).replace(/ /g, '/')} at ${paidDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>
                                     </div>
                                 </div>
                                 <div class="text-right">
@@ -2441,6 +2656,73 @@ const AppLogic = {
 
         this.modalContainer.innerHTML = html;
         this.modalContainer.classList.remove('hidden');
+    },
+
+    toggleWillTecViewMode(mode) {
+        this.willTecViewMode = mode;
+        const listBtn = document.getElementById('view-mode-list');
+        const summaryBtn = document.getElementById('view-mode-summary');
+
+        if (mode === 'list') {
+            listBtn.className = 'px-4 py-1.5 rounded-lg text-xs font-bold transition-all bg-sky-500 text-slate-950';
+            summaryBtn.className = 'px-4 py-1.5 rounded-lg text-xs font-bold transition-all text-slate-400 hover:text-slate-100';
+        } else {
+            summaryBtn.className = 'px-4 py-1.5 rounded-lg text-xs font-bold transition-all bg-sky-500 text-slate-950';
+            listBtn.className = 'px-4 py-1.5 rounded-lg text-xs font-bold transition-all text-slate-400 hover:text-slate-100';
+        }
+
+        this.renderLoans();
+    },
+
+    getGroupedCreditorData(loans) {
+        const groups = {};
+        loans.forEach(l => {
+            const creditor = l.end_user;
+            if (!groups[creditor]) {
+                groups[creditor] = {
+                    name: creditor,
+                    totalPrincipal: 0,
+                    totalInterest: 0,
+                    loans: [],
+                    latestDate: new Date(0)
+                };
+            }
+            const metrics = this.calculateLoanMetrics(l);
+            groups[creditor].totalPrincipal += parseFloat(l.principal);
+            groups[creditor].totalInterest += metrics.monthlyTotalInterest;
+            groups[creditor].loans.push(l);
+            
+            const loanDate = new Date(l.created_at);
+            if (loanDate > groups[creditor].latestDate) {
+                groups[creditor].latestDate = loanDate;
+            }
+        });
+
+        // Convert to array and sort by creditor name
+        return Object.values(groups).sort((a, b) => a.name.localeCompare(b.name));
+    },
+
+    onLoanCategoryChange(isEdit = false) {
+        const prefix = isEdit ? 'edit-' : '';
+        const category = document.getElementById(prefix + 'loan-category').value;
+        const shareContainer = document.getElementById(prefix + 'share-split-container');
+        const currencyField = document.getElementById(prefix + 'loan-currency');
+        const userLabel = document.getElementById(prefix + 'loan-user-label');
+        
+        if (category === 'will_tec') {
+            if (shareContainer) shareContainer.classList.add('hidden');
+            if (userLabel) userLabel.textContent = "Creditor Name";
+            if (currencyField) {
+                currencyField.value = 'KWD';
+                currencyField.disabled = true;
+            }
+        } else {
+            if (shareContainer) shareContainer.classList.remove('hidden');
+            if (userLabel) userLabel.textContent = "End User Name";
+            if (currencyField) {
+                currencyField.disabled = false;
+            }
+        }
     }
 }
 
