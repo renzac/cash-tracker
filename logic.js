@@ -434,7 +434,10 @@ const AppLogic = {
         const searchQuery = document.getElementById('history-search')?.value.toLowerCase();
         const dateFilter = document.getElementById('history-date-filter')?.value;
 
-        let txs = Store.data.transactions;
+        let txs = [...Store.data.transactions].sort((a, b) => {
+            if (b.date !== a.date) return b.date.localeCompare(a.date);
+            return b.id - a.id; // Newest creation time first for same date
+        });
 
         // Apply Date Filter
         if (dateFilter) {
@@ -1253,20 +1256,11 @@ const AppLogic = {
                                 </tr>
                             </thead>
                             <tbody class="divide-y divide-slate-800/30">
-                                <!-- Opening Balance Row -->
-                                <tr class="bg-slate-950/40">
-                                    <td class="py-3 px-2 text-slate-500 font-orbitron text-[10px]" colspan="1">${startStr.split('-').slice(1).reverse().join('/')}</td>
-                                    <td class="py-3 px-2 text-[10px] text-slate-400 font-bold uppercase tracking-tight" colspan="3">Opening Balance (B/F)</td>
-                                    <td class="py-3 px-2 text-right font-orbitron text-xs text-slate-400">
-                                        ${periodOpeningBal >= 0 ? '+' : ''}${periodOpeningBal.toFixed(3)}
-                                    </td>
-                                </tr>
-
                                 ${statementRows.length === 0 ? `
                                     <tr>
                                         <td colspan="5" class="py-10 text-center text-slate-600 text-[10px] uppercase tracking-widest italic">No transactions found in this period</td>
                                     </tr>
-                                ` : statementRows.map(t => {
+                                ` : statementRows.reverse().map(t => {
             let relatedName = '-';
             if (type === 'account') {
                 const led = Store.data.ledgers.find(l => l.id == t.ledgerId);
@@ -1303,6 +1297,15 @@ const AppLogic = {
                                         </tr>
                                     `;
         }).join('')}
+
+                                <!-- Opening Balance Row (at the bottom in DESC view) -->
+                                <tr class="bg-slate-950/40">
+                                    <td class="py-3 px-2 text-slate-500 font-orbitron text-[10px]" colspan="1">${startStr.split('-').slice(1).reverse().join('/')}</td>
+                                    <td class="py-3 px-2 text-[10px] text-slate-400 font-bold uppercase tracking-tight" colspan="3">Opening Balance (B/F)</td>
+                                    <td class="py-3 px-2 text-right font-orbitron text-xs text-slate-400">
+                                        ${periodOpeningBal >= 0 ? '+' : ''}${periodOpeningBal.toFixed(3)}
+                                    </td>
+                                </tr>
                             </tbody>
                         </table>
                     </div>
@@ -1469,6 +1472,7 @@ const AppLogic = {
                             </tr>
                         </thead>
                         <tbody class="divide-y divide-slate-800/30">
+                            ${statementRows.reverse().join('')}
                             <tr class="bg-slate-950/30">
                                 <td class="py-3 px-2 text-[10px] text-slate-500 font-bold uppercase" colspan="2">Net Worth (B/F) at ${startStr.split('-').reverse().slice(0, 2).join('/')}</td>
                                 <td class="py-3 px-2" colspan="2"></td>
@@ -1476,7 +1480,6 @@ const AppLogic = {
                                     ${periodOpeningNetWorth.toFixed(3)}
                                 </td>
                             </tr>
-                            ${statementRows.join('')}
                         </tbody>
                     </table>
                 </div>
@@ -2619,7 +2622,7 @@ const AppLogic = {
 
         const payments = Store.data.loanPayments
             .filter(p => p.loan_id === loanId)
-            .sort((a, b) => new Date(b.month_year) - new Date(a.month_year));
+            .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
 
         const metrics = this.calculateLoanMetrics(loan);
 
