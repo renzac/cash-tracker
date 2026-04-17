@@ -5,6 +5,7 @@ const AppLogic = {
     modalContainer: document.getElementById('modal-container'),
     loanCategoryFilter: 'personal',
     loanFilterStatus: 'active',
+    loanSortCriteria: 'priority',
     willTecViewMode: 'list',
 
     async init() {
@@ -1909,60 +1910,97 @@ const AppLogic = {
         const listView = document.getElementById('loan-list');
         const summaryView = document.getElementById('loan-summary-view');
 
+        // Calculate and Sort
+        let overdueCount = 0;
+        let upcomingCount = 0;
+        let totalActiveCount = 0;
+
+        const processedLoans = loans.map(l => {
+            const p = this.getLoanPriorityData(l);
+            if (l.is_active) {
+                totalActiveCount++;
+                if (p.status === 'OVERDUE') overdueCount++;
+                if (p.status === 'UPCOMING') upcomingCount++;
+            }
+            return { ...l, priority: p };
+        });
+
+        // Sorting Logic
+        processedLoans.sort((a, b) => {
+            if (this.loanSortCriteria === 'priority') {
+                if (a.priority.priority !== b.priority.priority) {
+                    return a.priority.priority - b.priority.priority;
+                }
+                // Within the same priority, sub-sort
+                if (a.priority.status === 'OVERDUE') return b.priority.days - a.priority.days; // Most overdue first
+                if (a.priority.status === 'UPCOMING') return a.priority.days - b.priority.days; // Nearest due first
+                return b.principal - a.principal; // Then highest principal
+            } else if (this.loanSortCriteria === 'date') {
+                return a.priority.nextDate - b.priority.nextDate;
+            } else if (this.loanSortCriteria === 'amount') {
+                return b.principal - a.principal;
+            } else {
+                return a.end_user.localeCompare(b.end_user);
+            }
+        });
+
+        // Update Sticky Header
+        const priorityHeader = document.getElementById('loan-priority-stats');
+        if (priorityHeader) {
+            priorityHeader.classList.remove('hidden');
+            priorityHeader.innerHTML = `
+                <div class="flex items-center space-x-2 ${overdueCount > 0 ? 'text-rose-500' : 'text-slate-500'}">
+                    <span class="w-2 h-2 rounded-full bg-rose-500 ${overdueCount > 0 ? 'animate-pulse' : 'opacity-20'}"></span>
+                    <span>${overdueCount} Overdue</span>
+                </div>
+                <div class="w-px h-4 bg-slate-800"></div>
+                <div class="flex items-center space-x-2 ${upcomingCount > 0 ? 'text-amber-500' : 'text-slate-500'}">
+                    <span class="w-2 h-2 rounded-full bg-amber-500"></span>
+                    <span>${upcomingCount} Upcoming</span>
+                </div>
+                <div class="w-px h-4 bg-slate-800"></div>
+                <div class="flex items-center space-x-2 text-sky-500">
+                    <span class="w-2 h-2 rounded-full bg-sky-500"></span>
+                    <span>${totalActiveCount} Total</span>
+                </div>
+            `;
+        }
+
         if (isWillTec && this.willTecViewMode === 'summary') {
             listView.classList.add('hidden');
             summaryView.classList.remove('hidden');
-            this.renderCreditorSummaryView(loans);
+            // When in summary mode, creditors should also be sorted by priority
+            this.renderCreditorSummaryView(processedLoans);
             return;
         } else {
             listView.classList.remove('hidden');
             summaryView.classList.add('hidden');
         }
 
-        if (loans.length === 0) {
+        if (processedLoans.length === 0) {
             list.innerHTML = `<div class="col-span-full text-center py-20 text-slate-500 italic">No ${this.loanFilterStatus} loans found</div>`;
             return;
         }
 
-        const now = new Date();
-        const currentMonthYear = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-
-        // Render Reminders Dashboard
-        this.renderRemindersWidget();
-
-        list.innerHTML = loans.map(l => {
+        list.innerHTML = processedLoans.map(l => {
+            const p = l.priority;
             const metrics = this.calculateLoanMetrics(l);
-            const nextDate = this.getNextInterestDate(l);
-            const isPaid = Store.data.loanPayments.some(p => p.loan_id === l.id && p.month_year === currentMonthYear);
             
-            // Refined Conditional Styling
-            let borderClass = 'border-slate-800';
-            let cardBg = 'bg-slate-900';
-            let statusBadge = '';
-            
-            if (!l.is_active) {
-                cardBg = 'bg-rose-500/5';
-                borderClass = 'border-rose-500/20';
-            } else if (!isPaid) {
-                const startDate = new Date(l.created_at);
-                const dueDay = startDate.getDate();
-                const todayDay = now.getDate();
-                
-                if (todayDay > dueDay) {
-                    borderClass = 'border-rose-500 animate-pulse-red shadow-[0_0_15px_rgba(244,63,94,0.3)]';
-                    statusBadge = `<span class="px-2 py-0.5 rounded-full bg-rose-500 text-slate-950 text-[8px] font-black uppercase tracking-tighter animate-pulse ml-2">OVERDUE</span>`;
-                } else if (dueDay - todayDay <= 3) {
-                    borderClass = 'border-amber-500 shadow-[0_0_15px_rgba(245,158,11,0.2)]';
-                    statusBadge = `<span class="px-2 py-0.5 rounded-full bg-amber-500 text-slate-950 text-[8px] font-black uppercase tracking-tighter ml-2">DUE SOON</span>`;
-                }
+            let priorityBadge = '';
+            if (p.status === 'OVERDUE') {
+                priorityBadge = `<div class="bg-rose-500 text-slate-950 px-2 py-1 rounded-lg text-[10px] font-black uppercase tracking-tighter animate-pulse-red mb-3">OVERDUE BY ${p.days} DAYS</div>`;
+            } else if (p.status === 'UPCOMING') {
+                priorityBadge = `<div class="bg-amber-500 text-slate-950 px-2 py-1 rounded-lg text-[10px] font-black uppercase tracking-tighter mb-3">DUE IN ${p.days} DAYS</div>`;
             }
 
             return `
-                <div class="loan-card ${cardBg} border ${borderClass} rounded-3xl p-6 flex flex-col justify-between group transition-all hover:scale-[1.02]">
+                <div class="loan-card ${p.bg} border ${p.border} rounded-3xl p-6 flex flex-col justify-between group transition-all hover:scale-[1.02] relative overflow-hidden">
+                    ${p.status === 'OVERDUE' ? '<div class="absolute top-0 right-0 w-16 h-16 bg-rose-500/10 blur-2xl rounded-full"></div>' : ''}
                     <div>
+                        ${priorityBadge}
                         <div class="flex justify-between items-start mb-4">
                             <div>
-                                <h3 class="text-xl font-bold text-slate-100">${l.end_user}${statusBadge}</h3>
+                                <h3 class="text-xl font-bold text-slate-100">${l.end_user}</h3>
                                 <div class="text-[10px] text-slate-500 uppercase tracking-widest mt-1">
                                     ${l.currency_code} Portfolio | ${l.category === 'will_tec' ? 'Creditor' : 'Personal'} | Received: ${new Date(l.created_at).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }).replace(/ /g, '/')}
                                 </div>
@@ -1996,27 +2034,24 @@ const AppLogic = {
                         </div>
                     </div>
 
-                    <div class="mt-8 space-y-4">
-                        <div class="flex items-center justify-between text-[10px] text-slate-500 uppercase tracking-widest">
-                            <span>Next ${isPaid ? 'Payment' : 'Due'}</span>
-                            <span class="${!isPaid && now.getDate() > new Date(l.created_at).getDate() ? 'text-rose-500 font-bold' : ''}">${nextDate ? nextDate.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }).replace(/ /g, '/') : 'N/A'}</span>
+                    <div class="mt-8 space-y-4 shadow-2xl p-4 bg-slate-950/20 rounded-2xl border border-white/5">
+                        <div class="flex items-center justify-between text-[10px] text-slate-500 uppercase tracking-widest font-black">
+                            <span>Next ${p.isPaid ? 'Payment' : 'Due At'}</span>
+                            <span class="${p.color} font-orbitron">${p.nextDate.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }).replace(/ /g, '/')}</span>
                         </div>
                         
                         <div class="flex space-x-2">
                             ${l.is_active ? `
-                                <button onclick="event.stopPropagation(); ${isPaid ? `window.AppLogic.handleUnmarkPaid('${l.id}')` : `window.AppLogic.handleMarkPaid('${l.id}')`}" 
-                                    class="flex-1 py-1.5 rounded-xl font-bold text-xs transition-all ${isPaid ? 'bg-amber-500/10 text-amber-500 border border-amber-500/20 hover:bg-amber-500 hover:text-slate-950' : 'bg-sky-500 text-slate-950 hover:bg-sky-400 shadow-lg shadow-sky-500/20 active:scale-95'}">
-                                    ${isPaid ? '<i class="fas fa-undo mr-1"></i> Revert' : 'Mark Paid'}
+                                <button onclick="event.stopPropagation(); ${p.isPaid ? `window.AppLogic.handleUnmarkPaid('${l.id}')` : `window.AppLogic.handleMarkPaid('${l.id}')`}" 
+                                    class="flex-1 py-1.5 rounded-xl font-bold text-xs transition-all ${p.isPaid ? 'bg-amber-500/10 text-amber-500 border border-amber-500/20' : 'bg-sky-500 text-slate-950 shadow-lg shadow-sky-500/20 active:scale-95'}">
+                                    ${p.isPaid ? '<i class="fas fa-undo mr-1"></i> Revert' : 'Mark Paid'}
                                 </button>
                             ` : ''}
-                            <button onclick="event.stopPropagation(); window.AppLogic.showLoanStatement('${l.id}')" class="p-2.5 rounded-xl bg-slate-800 text-slate-400 hover:text-emerald-400 transition-all group-hover:bg-slate-700" title="View History">
+                            <button onclick="event.stopPropagation(); window.AppLogic.showLoanStatement('${l.id}')" class="p-2.5 rounded-xl bg-slate-800 text-slate-400 hover:text-emerald-400" title="View History">
                                 <i class="fas fa-file-invoice-dollar"></i>
                             </button>
-                            <button onclick="event.stopPropagation(); window.AppLogic.showEditLoanModal('${l.id}')" class="p-2.5 rounded-xl bg-slate-800 text-slate-400 hover:text-sky-400 transition-all group-hover:bg-slate-700">
+                            <button onclick="event.stopPropagation(); window.AppLogic.showEditLoanModal('${l.id}')" class="p-2.5 rounded-xl bg-slate-800 text-slate-400 hover:text-sky-400">
                                 <i class="fas fa-edit"></i>
-                            </button>
-                            <button onclick="event.stopPropagation(); window.AppLogic.handleDeleteLoan('${l.id}')" class="p-2.5 rounded-xl bg-slate-800 text-slate-400 hover:text-rose-500 transition-all group-hover:bg-slate-700">
-                                <i class="fas fa-trash-alt"></i>
                             </button>
                         </div>
                     </div>
@@ -2084,9 +2119,21 @@ const AppLogic = {
 
         grouped.forEach(g => {
             const dateStr = g.latestDate.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }).replace(/ /g, '/');
+            
+            let statusBadge = '';
+            let rowBg = '';
+            if (g.maxPriority === 1) {
+                statusBadge = '<span class="w-2 h-2 rounded-full bg-rose-500 animate-pulse mr-2"></span>';
+                rowBg = 'bg-rose-500/5';
+            } else if (g.maxPriority === 2) {
+                statusBadge = '<span class="w-2 h-2 rounded-full bg-amber-500 mr-2"></span>';
+                rowBg = 'bg-amber-500/5';
+            }
+
             html += `
-                <tr class="group hover:bg-white/5 transition-all cursor-pointer" onclick="this.nextElementSibling.classList.toggle('hidden')">
+                <tr class="group hover:bg-white/10 transition-all cursor-pointer ${rowBg}" onclick="this.nextElementSibling.classList.toggle('hidden')">
                     <td class="py-5 pl-4 flex items-center space-x-3">
+                        ${statusBadge}
                         <div class="w-8 h-8 rounded-full bg-sky-500/10 flex items-center justify-center text-sky-400 font-bold text-xs uppercase">
                             ${g.name.charAt(0)}
                         </div>
@@ -2658,6 +2705,47 @@ const AppLogic = {
         this.modalContainer.classList.remove('hidden');
     },
 
+    handleLoanSort(criteria) {
+        this.loanSortCriteria = criteria;
+        this.renderLoans();
+    },
+
+    getLoanPriorityData(l) {
+        const now = new Date();
+        now.setHours(0, 0, 0, 0);
+        
+        const startDate = new Date(l.created_at);
+        const dueDay = startDate.getDate();
+        const currentMonthYear = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+        const isPaid = Store.data.loanPayments.some(p => p.loan_id === l.id && p.month_year === currentMonthYear);
+        
+        let nextDate = new Date(now.getFullYear(), now.getMonth(), dueDay);
+        if (isPaid || nextDate < now) {
+            // If already paid this month OR the date has passed (and we are assessing for next month/overdue)
+            if (isPaid) {
+                nextDate = new Date(now.getFullYear(), now.getMonth() + 1, dueDay);
+            }
+        }
+
+        const diffTime = nextDate - now;
+        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+        
+        if (!l.is_active) {
+            return { status: 'CLOSED', priority: 4, days: 0, nextDate, isPaid: true, color: 'text-slate-500', border: 'border-slate-800', bg: 'bg-slate-900/40' };
+        }
+
+        if (!isPaid && nextDate < now) {
+            const overdueDays = Math.floor((now - nextDate) / (1000 * 60 * 60 * 24));
+            return { status: 'OVERDUE', priority: 1, days: overdueDays, nextDate, isPaid: false, color: 'text-rose-500', border: 'border-rose-500 shadow-[0_0_15px_rgba(244,63,94,0.3)]', bg: 'bg-rose-500/5' };
+        }
+
+        if (!isPaid && diffDays <= 7) {
+            return { status: 'UPCOMING', priority: 2, days: diffDays, nextDate, isPaid: false, color: 'text-amber-500', border: 'border-amber-500 shadow-[0_0_15px_rgba(245,158,11,0.2)]', bg: 'bg-amber-500/5' };
+        }
+
+        return { status: 'NORMAL', priority: 3, days: diffDays, nextDate, isPaid, color: 'text-sky-500', border: 'border-slate-800', bg: 'bg-slate-900' };
+    },
+
     toggleWillTecViewMode(mode) {
         this.willTecViewMode = mode;
         const listBtn = document.getElementById('view-mode-list');
@@ -2678,19 +2766,27 @@ const AppLogic = {
         const groups = {};
         loans.forEach(l => {
             const creditor = l.end_user;
+            const priority = l.priority || this.getLoanPriorityData(l);
+            
             if (!groups[creditor]) {
                 groups[creditor] = {
                     name: creditor,
                     totalPrincipal: 0,
                     totalInterest: 0,
                     loans: [],
-                    latestDate: new Date(0)
+                    latestDate: new Date(0),
+                    maxPriority: 4 // Start at lowest (Closed/Normal)
                 };
             }
             const metrics = this.calculateLoanMetrics(l);
             groups[creditor].totalPrincipal += parseFloat(l.principal);
             groups[creditor].totalInterest += metrics.monthlyTotalInterest;
-            groups[creditor].loans.push(l);
+            groups[creditor].loans.push({ ...l, priority });
+            
+            // Keep track of the "most urgent" priority in this group
+            if (priority.priority < groups[creditor].maxPriority) {
+                groups[creditor].maxPriority = priority.priority;
+            }
             
             const loanDate = new Date(l.created_at);
             if (loanDate > groups[creditor].latestDate) {
@@ -2698,8 +2794,11 @@ const AppLogic = {
             }
         });
 
-        // Convert to array and sort by creditor name
-        return Object.values(groups).sort((a, b) => a.name.localeCompare(b.name));
+        // Convert to array and sort: Priority first, then Name
+        return Object.values(groups).sort((a, b) => {
+            if (a.maxPriority !== b.maxPriority) return a.maxPriority - b.maxPriority;
+            return a.name.localeCompare(b.name);
+        });
     },
 
     onLoanCategoryChange(isEdit = false) {

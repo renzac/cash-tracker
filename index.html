@@ -396,6 +396,11 @@
                         </div>
                     </div>
 
+                    <!-- Sticky Priority Header -->
+                    <div id="loan-priority-stats" class="sticky top-0 z-[100] bg-slate-950/80 backdrop-blur-xl border border-slate-800 rounded-2xl p-3 flex justify-around items-center text-[10px] font-black uppercase tracking-widest animate-fade-in shadow-xl hidden">
+                        <!-- Dynamic content -->
+                    </div>
+
                     <!-- Category Switcher -->
                     <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-800 pb-4">
                         <div class="flex items-center space-x-2">
@@ -417,9 +422,17 @@
                             <input type="text" id="loan-search" placeholder="Search user (Subin, Rajesh...)"
                                 class="w-full bg-slate-900 border border-slate-800 rounded-xl pl-10 pr-4 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-sky-500 transition-all">
                         </div>
-                        <div class="flex items-center bg-slate-900 border border-slate-800 rounded-xl p-1">
-                            <button id="toggle-active-loans" onclick="window.AppLogic.toggleLoanFilter('active')" class="px-4 py-1.5 rounded-lg text-xs font-bold transition-all bg-sky-500 text-slate-950">Active</button>
-                            <button id="toggle-closed-loans" onclick="window.AppLogic.toggleLoanFilter('closed')" class="px-4 py-1.5 rounded-lg text-xs font-bold transition-all text-slate-400 hover:text-slate-100">Closed</button>
+                        <div class="flex items-center space-x-2 w-full sm:w-auto">
+                            <div class="flex items-center bg-slate-900 border border-slate-800 rounded-xl p-1">
+                                <button id="toggle-active-loans" onclick="window.AppLogic.toggleLoanFilter('active')" class="px-4 py-1.5 rounded-lg text-xs font-bold transition-all bg-sky-500 text-slate-950">Active</button>
+                                <button id="toggle-closed-loans" onclick="window.AppLogic.toggleLoanFilter('closed')" class="px-4 py-1.5 rounded-lg text-xs font-bold transition-all text-slate-400 hover:text-slate-100">Closed</button>
+                            </div>
+                            <select id="loan-sort" onchange="window.AppLogic.handleLoanSort(this.value)" class="bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-xs font-bold text-slate-300 focus:outline-none focus:ring-1 focus:ring-sky-500">
+                                <option value="priority">Sort: Priority</option>
+                                <option value="date">Sort: Due Date</option>
+                                <option value="amount">Sort: Amount</option>
+                                <option value="name">Sort: Creditor</option>
+                            </select>
                         </div>
                         <button onclick="window.AppLogic.showAddLoanModal()" class="w-full sm:w-auto bg-emerald-500 hover:bg-emerald-400 text-slate-950 px-6 py-2 rounded-xl font-bold flex items-center justify-center space-x-2 transition-all active:scale-95 shadow-lg shadow-emerald-500/20">
                             <i class="fas fa-plus"></i><span>New Loan</span>
