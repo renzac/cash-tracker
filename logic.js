@@ -1144,7 +1144,10 @@ const AppLogic = {
                 // For Income/Expense, ledgerId is the correct field for the entity
                 return tLedId === targetId;
             }
-        }).sort((a, b) => a.id - b.id);
+        }).sort((a, b) => {
+            if (a.date !== b.date) return a.date.localeCompare(b.date);
+            return a.id - b.id;
+        });
 
         // Helper: Determine if transaction is IN or OUT for the current view
         const getSide = (t) => {
@@ -1200,6 +1203,12 @@ const AppLogic = {
                 runningBal += (type === 'ledger' && item.groupId > 2) ? t.amount : -t.amount;
             }
             return { ...t, isIn, isOut, currentBal: runningBal };
+        });
+
+        // 3. APPLY STRICT DESC SORT FOR DISPLAY (Newest Date -> Newest ID)
+        statementRows.sort((a, b) => {
+            if (b.date !== a.date) return b.date.localeCompare(a.date);
+            return b.id - a.id;
         });
 
         let html = `
@@ -1260,7 +1269,7 @@ const AppLogic = {
                                     <tr>
                                         <td colspan="5" class="py-10 text-center text-slate-600 text-[10px] uppercase tracking-widest italic">No transactions found in this period</td>
                                     </tr>
-                                ` : statementRows.reverse().map(t => {
+                                ` : statementRows.map(t => {
             let relatedName = '-';
             if (type === 'account') {
                 const led = Store.data.ledgers.find(l => l.id == t.ledgerId);
@@ -1355,7 +1364,10 @@ const AppLogic = {
         let absoluteBaseNetWorth = initialAccountsVal + initialRollingVal;
 
         // 2. Sort ALL transactions to calculate current position
-        const allTxs = [...Store.data.transactions].sort((a, b) => a.id - b.id);
+        const allTxs = [...Store.data.transactions].sort((a, b) => {
+            if (a.date !== b.date) return a.date.localeCompare(b.date);
+            return a.id - b.id;
+        });
 
         // Utility to calculate impact of a single transaction on "Internal Net Worth"
         const getImpact = (t) => {
@@ -1411,22 +1423,37 @@ const AppLogic = {
                 if (impact > 0) totalNetIn += impact;
                 else totalNetOut += Math.abs(impact);
 
-                statementRows.push(`
-                    <tr class="hover:bg-slate-950/50 transition-colors">
-                        <td class="py-3 px-2 whitespace-nowrap text-slate-400 text-[11px] font-orbitron">${t.date.split('-').reverse().slice(0, 2).join('/')}</td>
-                        <td class="py-3 px-2">
-                            <div class="text-[10px] text-teal-500 font-bold uppercase tracking-tighter mb-0.5">${t.type}</div>
-                            <div class="text-[10px] text-slate-300 truncate" title="${t.remark}">${t.remark || '-'}</div>
-                        </td>
-                        <td class="py-3 px-2 text-rose-400 font-orbitron text-xs font-medium">${impact < 0 ? Math.abs(impact).toFixed(3) : '-'}</td>
-                        <td class="py-3 px-2 text-emerald-400 font-orbitron text-xs font-medium">${impact > 0 ? impact.toFixed(3) : '-'}</td>
-                        <td class="py-3 px-2 text-right font-orbitron text-xs text-teal-400">
-                            ${runningNetWorth.toFixed(3)}
-                        </td>
-                    </tr>
-                `);
+                statementRows.push({
+                    date: t.date,
+                    id: t.id,
+                    type: t.type,
+                    remark: t.remark,
+                    impact,
+                    runningNetWorth: runningNetWorth.toFixed(3)
+                });
             }
         });
+
+        // 5. APPLY STRICT DESC SORT FOR DISPLAY
+        statementRows.sort((a, b) => {
+            if (b.date !== a.date) return b.date.localeCompare(a.date);
+            return b.id - a.id;
+        });
+
+        const statementHtml = statementRows.map(r => `
+            <tr class="hover:bg-slate-950/50 transition-colors">
+                <td class="py-3 px-2 whitespace-nowrap text-slate-400 text-[11px] font-orbitron">${r.date.split('-').reverse().slice(0, 2).join('/')}</td>
+                <td class="py-3 px-2">
+                    <div class="text-[10px] text-teal-500 font-bold uppercase tracking-tighter mb-0.5">${r.type}</div>
+                    <div class="text-[10px] text-slate-300 truncate" title="${r.remark}">${r.remark || '-'}</div>
+                </td>
+                <td class="py-3 px-2 text-rose-400 font-orbitron text-xs font-medium">${r.impact < 0 ? Math.abs(r.impact).toFixed(3) : '-'}</td>
+                <td class="py-3 px-2 text-emerald-400 font-orbitron text-xs font-medium">${r.impact > 0 ? r.impact.toFixed(3) : '-'}</td>
+                <td class="py-3 px-2 text-right font-orbitron text-xs text-teal-400">
+                    ${r.runningNetWorth}
+                </td>
+            </tr>
+        `).join('');
 
         const html = `
             <div id="modal-content" class="bg-slate-900 w-full max-w-4xl rounded-t-3xl md:rounded-3xl p-6 lg:p-8 space-y-4 shadow-2xl border-t border-slate-800 transform animate-fade-in flex flex-col max-h-[90vh]">
@@ -1472,7 +1499,7 @@ const AppLogic = {
                             </tr>
                         </thead>
                         <tbody class="divide-y divide-slate-800/30">
-                            ${statementRows.reverse().join('')}
+                            ${statementHtml}
                             <tr class="bg-slate-950/30">
                                 <td class="py-3 px-2 text-[10px] text-slate-500 font-bold uppercase" colspan="2">Net Worth (B/F) at ${startStr.split('-').reverse().slice(0, 2).join('/')}</td>
                                 <td class="py-3 px-2" colspan="2"></td>
@@ -1679,6 +1706,7 @@ const AppLogic = {
         csv += `${startStr.split('-').reverse().join('/')},Opening Balance (B/F),Calculated Value before period,,,\"${periodOpeningBal.toFixed(3)}\"\n`;
 
         let runningBal = periodOpeningBal;
+        const csvRowsArray = [];
         periodTxs.forEach(t => {
             let isIn = false, isOut = false;
             if (type === 'account') {
@@ -1711,15 +1739,29 @@ const AppLogic = {
                 }
             }
 
-            const row = [
-                t.date.split('-').reverse().join('/'),
-                `\"${relatedName}\"`,
-                `\"${t.remark || ''}\"`,
-                isOut ? t.amount.toFixed(3) : '0.000',
-                isIn ? t.amount.toFixed(3) : '0.000',
-                `\"${runningBal.toFixed(3)}\"`
-            ];
-            csv += row.join(',') + "\n";
+            csvRowsArray.push({
+                date: t.date,
+                id: t.id,
+                cells: [
+                    t.date.split('-').reverse().join('/'),
+                    `\"${relatedName}\"`,
+                    `\"${t.remark || ''}\"`,
+                    isOut ? t.amount.toFixed(3) : '0.000',
+                    isIn ? t.amount.toFixed(3) : '0.000',
+                    `\"${runningBal.toFixed(3)}\"`
+                ]
+            });
+        });
+
+        // APPLY STRICT DESC SORT
+        csvRowsArray.sort((a, b) => {
+            if (b.date !== a.date) return b.date.localeCompare(a.date);
+            return b.id - a.id;
+        });
+
+        // Add Sorted Rows to CSV
+        csvRowsArray.forEach(r => {
+            csv += r.cells.join(',') + "\n";
         });
 
         const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
