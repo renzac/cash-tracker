@@ -1098,7 +1098,7 @@ const AppLogic = {
         this.modalContainer.classList.remove('hidden');
     },
 
-    showStatement(type, id, startStr, endStr) {
+    showStatement(type, id, startStr, endStr, advancedFilterId) {
         const item = Store.data[type + 's'].find(i => i.id == id);
 
         // Default to current month if dates not provided
@@ -1119,31 +1119,48 @@ const AppLogic = {
             const tToId = String(t.toId);
             const tLedId = String(t.ledgerId);
 
+            let isRelevant = false;
             if (type === 'account') {
-                // In account mode, IDs 1, 2, 3... are strictly Banks/Cash
                 if (t.type === 'contra') {
                     const from = Store.data.accounts.find(a => String(a.id) === tFromId);
                     const to = Store.data.accounts.find(a => String(a.id) === tToId);
-                    // Only include if KFH (targetId) was involved AS AN ACCOUNT
-                    const fromMatches = (tFromId === targetId && from);
-                    const toMatches = (tToId === targetId && to);
-                    return fromMatches || toMatches;
+                    isRelevant = (tFromId === targetId && from) || (tToId === targetId && to);
+                } else {
+                    isRelevant = tFromId === targetId;
                 }
-                // For Income/Expense, accountId MUST be the bank/cash side
-                return tFromId === targetId;
             } else {
-                // Ledger mode: IDs 1, 2, 3... are strictly categories/people
                 if (t.type === 'contra') {
                     const from = Store.data.ledgers.find(l => String(l.id) === tFromId);
                     const to = Store.data.ledgers.find(l => String(l.id) === tToId);
-                    // Only include if this ledger was involved AS A LEDGER
-                    const fromMatches = (tFromId === targetId && from);
-                    const toMatches = (tToId === targetId && to);
-                    return fromMatches || toMatches;
+                    isRelevant = (tFromId === targetId && from) || (tToId === targetId && to);
+                } else {
+                    isRelevant = tLedId === targetId;
                 }
-                // For Income/Expense, ledgerId is the correct field for the entity
-                return tLedId === targetId;
             }
+            if (!isRelevant) return false;
+
+            if (advancedFilterId) {
+                const isFilterAcc = advancedFilterId.startsWith('acc_');
+                const filterId = advancedFilterId.split('_')[1];
+                if (isFilterAcc) {
+                    if (t.type === 'contra') {
+                        const fromAcc = Store.data.accounts.find(a => String(a.id) === tFromId);
+                        if (fromAcc) return tFromId === filterId || tToId === filterId;
+                        return false;
+                    } else {
+                        return tFromId === filterId;
+                    }
+                } else {
+                    if (t.type === 'contra') {
+                        const fromLed = Store.data.ledgers.find(l => String(l.id) === tFromId);
+                        if (fromLed) return tFromId === filterId || tToId === filterId;
+                        return false;
+                    } else {
+                        return tLedId === filterId;
+                    }
+                }
+            }
+            return true;
         }).sort((a, b) => {
             if (a.date !== b.date) return a.date.localeCompare(b.date);
             return a.id - b.id;
@@ -1223,7 +1240,7 @@ const AppLogic = {
                             <p class="text-[10px] text-slate-500 uppercase tracking-widest">Statement History</p>
                         </div>
                         <div class="flex items-center space-x-3">
-                            <button onclick="AppLogic.exportStatementToExcel('${type}', ${id}, document.getElementById('stmt-start').value, document.getElementById('stmt-end').value)" class="hidden md:flex items-center space-x-2 bg-emerald-500/10 text-emerald-400 px-3 py-1.5 rounded-lg text-[10px] font-semibold border border-emerald-500/20 hover:bg-emerald-500/20 transition-all">
+                            <button onclick="AppLogic.exportStatementToExcel('${type}', ${id}, document.getElementById('stmt-start').value, document.getElementById('stmt-end').value, document.getElementById('stmt-advanced-filter')?.value)" class="hidden md:flex items-center space-x-2 bg-emerald-500/10 text-emerald-400 px-3 py-1.5 rounded-lg text-[10px] font-semibold border border-emerald-500/20 hover:bg-emerald-500/20 transition-all">
                                 <i class="fas fa-file-excel"></i>
                                 <span>Export</span>
                             </button>
@@ -1233,8 +1250,8 @@ const AppLogic = {
                         </div>
                     </div>
 
-                    <!-- Date Filters -->
-                    <div class="bg-slate-950/50 p-3 rounded-2xl border border-slate-800/50 grid grid-cols-2 md:grid-cols-3 gap-3">
+                    <!-- Date Filters & Advanced -->
+                    <div class="bg-slate-950/50 p-3 rounded-2xl border border-slate-800/50 grid grid-cols-2 md:grid-cols-4 gap-3">
                         <div class="space-y-1">
                             <label class="text-[9px] text-slate-500 uppercase font-bold tracking-tight ml-1">From</label>
                             <input type="date" id="stmt-start" value="${startStr}" 
@@ -1245,8 +1262,20 @@ const AppLogic = {
                             <input type="date" id="stmt-end" value="${endStr}" 
                                 class="w-full bg-slate-900 border border-slate-800 rounded-lg px-2 py-1.5 text-xs text-slate-300 focus:outline-none focus:border-sky-500/50">
                         </div>
+                        <div class="space-y-1">
+                            <label class="text-[9px] text-slate-500 uppercase font-bold tracking-tight ml-1">Advanced Filter</label>
+                            <select id="stmt-advanced-filter" class="w-full bg-slate-900 border border-slate-800 rounded-lg px-2 py-1.5 text-[11px] font-bold text-slate-300 focus:outline-none focus:border-sky-500/50 max-w-full">
+                                <option value="">All Transactions</option>
+                                <optgroup label="Accounts">
+                                    ${Store.data.accounts.map(a => `<option value="acc_${a.id}" ${advancedFilterId === 'acc_'+a.id ? 'selected' : ''}>${a.name}</option>`).join('')}
+                                </optgroup>
+                                <optgroup label="Ledgers">
+                                    ${Store.data.ledgers.map(l => `<option value="led_${l.id}" ${advancedFilterId === 'led_'+l.id ? 'selected' : ''}>${l.name}</option>`).join('')}
+                                </optgroup>
+                            </select>
+                        </div>
                         <div class="col-span-2 md:col-span-1 flex items-end">
-                            <button onclick="AppLogic.showStatement('${type}', ${id}, document.getElementById('stmt-start').value, document.getElementById('stmt-end').value)" 
+                            <button onclick="AppLogic.showStatement('${type}', ${id}, document.getElementById('stmt-start').value, document.getElementById('stmt-end').value, document.getElementById('stmt-advanced-filter').value)" 
                                 class="w-full bg-sky-500/10 text-sky-400 border border-sky-500/20 hover:bg-sky-500/20 py-1.5 rounded-lg text-xs font-bold transition-all uppercase tracking-wider">
                                 Filter Rows
                             </button>
@@ -1657,7 +1686,7 @@ const AppLogic = {
         `).join('');
     },
 
-    exportStatementToExcel(type, id, startStr, endStr) {
+    exportStatementToExcel(type, id, startStr, endStr, advancedFilterId) {
         const item = Store.data[type + 's'].find(i => i.id == id);
 
         // Use provided dates or default to current month
@@ -1670,10 +1699,55 @@ const AppLogic = {
             endStr = now.toISOString().split('T')[0];
         }
 
-        const allRelevantTxs = Store.data.transactions.filter(t =>
-            (type === 'account' && (t.accountId == id || t.toId == id)) ||
-            (type === 'ledger' && (t.ledgerId == id || t.accountId == id || t.toId == id))
-        ).sort((a, b) => a.id - b.id);
+        const allRelevantTxs = Store.data.transactions.filter(t => {
+            const targetId = String(id);
+            const tFromId = String(t.accountId);
+            const tToId = String(t.toId);
+            const tLedId = String(t.ledgerId);
+
+            let isRelevant = false;
+            if (type === 'account') {
+                if (t.type === 'contra') {
+                    const from = Store.data.accounts.find(a => String(a.id) === tFromId);
+                    const to = Store.data.accounts.find(a => String(a.id) === tToId);
+                    isRelevant = (tFromId === targetId && from) || (tToId === targetId && to);
+                } else {
+                    isRelevant = tFromId === targetId;
+                }
+            } else {
+                if (t.type === 'contra') {
+                    const from = Store.data.ledgers.find(l => String(l.id) === tFromId);
+                    const to = Store.data.ledgers.find(l => String(l.id) === tToId);
+                    isRelevant = (tFromId === targetId && from) || (tToId === targetId && to);
+                } else {
+                    isRelevant = tLedId === targetId;
+                }
+            }
+            if (!isRelevant) return false;
+
+            if (advancedFilterId) {
+                const isFilterAcc = advancedFilterId.startsWith('acc_');
+                const filterId = advancedFilterId.split('_')[1];
+                if (isFilterAcc) {
+                    if (t.type === 'contra') {
+                        const fromAcc = Store.data.accounts.find(a => String(a.id) === tFromId);
+                        if (fromAcc) return tFromId === filterId || tToId === filterId;
+                        return false;
+                    } else {
+                        return tFromId === filterId;
+                    }
+                } else {
+                    if (t.type === 'contra') {
+                        const fromLed = Store.data.ledgers.find(l => String(l.id) === tFromId);
+                        if (fromLed) return tFromId === filterId || tToId === filterId;
+                        return false;
+                    } else {
+                        return tLedId === filterId;
+                    }
+                }
+            }
+            return true;
+        }).sort((a, b) => a.id - b.id);
 
         // 1. Calculate Opening Balance for the period
         let periodOpeningBal = item.openingBalance || 0;
