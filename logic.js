@@ -345,7 +345,22 @@ const AppLogic = {
         this.renderLedgerGroups();
         this.renderAccounts();
         this.renderLoans();
+        this.updateKnetBadge();
         if (Store.data.auth.currentUser?.role === 'admin') this.renderUsers();
+    },
+
+    updateKnetBadge() {
+        const badge = document.getElementById('knet-pending-badge');
+        if (!badge) return;
+        const pending = (Store.data.knetItems || []).filter(k => k.status === 'pending');
+        if (pending.length === 0) {
+            badge.textContent = 'None';
+            badge.className = 'font-orbitron text-sm font-bold text-slate-500';
+        } else {
+            const total = pending.reduce((s, k) => s + parseFloat(k.amount || 0), 0);
+            badge.textContent = total.toFixed(3) + ' KD';
+            badge.className = 'font-orbitron text-sm font-bold text-amber-400';
+        }
     },
 
     populateDropdowns() {
@@ -2161,7 +2176,7 @@ const AppLogic = {
                         
                         <div class="flex space-x-2">
                             ${l.is_active ? `
-                                <button onclick="event.stopPropagation(); ${p.isPaid ? `window.AppLogic.handleUnmarkPaid('${l.id}')` : `window.AppLogic.handleMarkPaid('${l.id}')`}" 
+                                <button onclick="event.stopPropagation(); ${p.isPaid ? `window.AppLogic.handleUnmarkPaid('${l.id}', '${p.targetMonthYear}')` : `window.AppLogic.handleMarkPaid('${l.id}', '${p.targetMonthYear}')`}" 
                                     class="flex-1 py-1.5 rounded-xl font-bold text-xs transition-all ${p.isPaid ? 'bg-amber-500/10 text-amber-500 border border-amber-500/20' : 'bg-sky-500 text-slate-950 shadow-lg shadow-sky-500/20 active:scale-95'}">
                                     ${p.isPaid ? '<i class="fas fa-undo mr-1"></i> Revert' : 'Mark Paid'}
                                 </button>
@@ -2179,15 +2194,17 @@ const AppLogic = {
         }).join('');
     },
 
-    async handleMarkPaid(loanId) {
-        const now = new Date();
-        const monthYear = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+    async handleMarkPaid(loanId, monthYear) {
+        if (!monthYear) {
+            const now = new Date();
+            monthYear = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+        }
         const success = await Store.markLoanPaid(loanId, monthYear);
         if (success) {
-            Auth.showToast("Interest marked as paid");
+            Auth.showToast(`Interest marked as paid for ${monthYear}`);
             this.renderLoans();
         } else {
-            Auth.showToast("Already paid for this month", "info");
+            Auth.showToast(`Already paid for ${monthYear}`, "info");
         }
     },
 
@@ -2200,12 +2217,14 @@ const AppLogic = {
         }
     },
 
-    async handleUnmarkPaid(loanId) {
-        const now = new Date();
-        const monthYear = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-        if (confirm("Revert this month's payment to Unpaid?")) {
+    async handleUnmarkPaid(loanId, monthYear) {
+        if (!monthYear) {
+            const now = new Date();
+            monthYear = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+        }
+        if (confirm(`Revert payment for ${monthYear} to Unpaid?`)) {
             await Store.unmarkLoanPaid(loanId, monthYear);
-            Auth.showToast("Payment Reverted", "error");
+            Auth.showToast(`Payment Reverted for ${monthYear}`, "error");
             this.renderLoans();
         }
     },
@@ -2614,33 +2633,19 @@ const AppLogic = {
         const upcoming = [];
 
         activeLoans.forEach(l => {
-            const startDate = new Date(l.created_at);
-            const dueDay = startDate.getDate();
-            const todayDay = now.getDate();
+            const p = this.getLoanPriorityData(l);
             
-            // Consider only the current month (ignore historical backlog)
-            const monthYear = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-            const isPaid = Store.data.loanPayments.some(p => p.loan_id === l.id && p.month_year === monthYear);
-            
-            if (!isPaid) {
-                const isTodayOverdue = todayDay > dueDay;
-                
-                if (isTodayOverdue) {
-                    overdue.push({
-                        name: l.end_user,
-                        date: `${dueDay} ${now.toLocaleDateString('en-US', { month: 'short', year: '2-digit' })}`
-                    });
-                } else {
-                    const daysUntil = dueDay - todayDay;
-                    // User Requirement: Show upcoming payments before 2 days (<= 2 days away)
-                    if (daysUntil >= 0 && daysUntil <= 2) {
-                        upcoming.push({
-                            name: l.end_user,
-                            date: `${dueDay} ${now.toLocaleDateString('en-US', { month: 'short' })}`,
-                            daysUntil
-                        });
-                    }
-                }
+            if (p.status === 'OVERDUE') {
+                overdue.push({
+                    name: l.end_user,
+                    date: p.nextDate.toLocaleDateString('en-US', { day: 'numeric', month: 'short', year: 'numeric' })
+                });
+            } else if (p.status === 'UPCOMING' && p.days <= 2) {
+                upcoming.push({
+                    name: l.end_user,
+                    date: p.nextDate.toLocaleDateString('en-US', { day: 'numeric', month: 'short' }),
+                    daysUntil: p.days
+                });
             }
         });
 
@@ -2713,13 +2718,22 @@ const AppLogic = {
         
         let oldestUnpaid = null;
         while (iter <= currentMonthStart) {
-            const monthYear = `${iter.getFullYear()}-${String(iter.getMonth() + 1).padStart(2, '0')}`;
+            const year = iter.getFullYear();
+            const month = iter.getMonth();
+            const monthYear = `${year}-${String(month + 1).padStart(2, '0')}`;
+            
+            const dueDate = new Date(year, month, startDate.getDate());
+            if (dueDate <= startDate) {
+                iter.setMonth(iter.getMonth() + 1);
+                continue;
+            }
+            
             const isPaid = Store.data.loanPayments.some(p => p.loan_id === l.id && p.month_year === monthYear);
             if (!isPaid) {
                 oldestUnpaid = monthYear;
                 break;
             }
-            iter.setMonth(iter.setMonth() + 1);
+            iter.setMonth(iter.getMonth() + 1);
         }
 
         if (oldestUnpaid) {
@@ -2838,10 +2852,45 @@ const AppLogic = {
         const currentMonthYear = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
         const isPaid = Store.data.loanPayments.some(p => p.loan_id === l.id && p.month_year === currentMonthYear);
         
-        let nextDate = new Date(now.getFullYear(), now.getMonth(), dueDay);
-        if (isPaid || nextDate < now) {
-            // If already paid this month OR the date has passed (and we are assessing for next month/overdue)
-            if (isPaid) {
+        // Historical unpaid-month scan — only applied from June 2026 onwards.
+        // For older loans the old single-month logic is preserved to avoid side-effects.
+        const HISTORY_CUTOFF = new Date(2026, 5, 1); // 1 Jun 2026
+
+        let nextDate = null;
+
+        if (now >= HISTORY_CUTOFF) {
+            // Start scanning from the later of: loan creation month OR June 2026
+            let iter = new Date(Math.max(
+                new Date(startDate.getFullYear(), startDate.getMonth(), 1).getTime(),
+                HISTORY_CUTOFF.getTime()
+            ));
+            const maxIter = new Date(now.getFullYear(), now.getMonth() + 2, 1);
+
+            while (iter <= maxIter) {
+                const year = iter.getFullYear();
+                const month = iter.getMonth();
+                const monthYear = `${year}-${String(month + 1).padStart(2, '0')}`;
+
+                const dueDate = new Date(year, month, dueDay);
+                // Skip if due date falls on or before the loan's actual start date
+                if (dueDate <= startDate) {
+                    iter.setMonth(iter.getMonth() + 1);
+                    continue;
+                }
+
+                const isMonthPaid = Store.data.loanPayments.some(p => p.loan_id === l.id && p.month_year === monthYear);
+                if (!isMonthPaid) {
+                    nextDate = dueDate;
+                    break;
+                }
+                iter.setMonth(iter.getMonth() + 1);
+            }
+        }
+
+        // Fallback / pre-cutoff loans: use classic single-month logic
+        if (!nextDate) {
+            nextDate = new Date(now.getFullYear(), now.getMonth(), dueDay);
+            if (isPaid || nextDate < now) {
                 nextDate = new Date(now.getFullYear(), now.getMonth() + 1, dueDay);
             }
         }
@@ -2850,19 +2899,21 @@ const AppLogic = {
         const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
         
         if (!l.is_active) {
-            return { status: 'CLOSED', priority: 4, days: 0, nextDate, isPaid: true, color: 'text-slate-500', border: 'border-slate-800', bg: 'bg-slate-900/40' };
+            return { status: 'CLOSED', priority: 4, days: 0, nextDate, isPaid: true, targetMonthYear: currentMonthYear, color: 'text-slate-500', border: 'border-slate-800', bg: 'bg-slate-900/40' };
         }
 
-        if (!isPaid && nextDate < now) {
+        const targetMonthYear = isPaid ? currentMonthYear : `${nextDate.getFullYear()}-${String(nextDate.getMonth() + 1).padStart(2, '0')}`;
+
+        if (nextDate < now) {
             const overdueDays = Math.floor((now - nextDate) / (1000 * 60 * 60 * 24));
-            return { status: 'OVERDUE', priority: 1, days: overdueDays, nextDate, isPaid: false, color: 'text-rose-500', border: 'border-rose-500 shadow-[0_0_15px_rgba(244,63,94,0.3)]', bg: 'bg-rose-500/5' };
+            return { status: 'OVERDUE', priority: 1, days: overdueDays, nextDate, isPaid: false, targetMonthYear, color: 'text-rose-500', border: 'border-rose-500 shadow-[0_0_15px_rgba(244,63,94,0.3)]', bg: 'bg-rose-500/5' };
         }
 
-        if (!isPaid && diffDays <= 7) {
-            return { status: 'UPCOMING', priority: 2, days: diffDays, nextDate, isPaid: false, color: 'text-amber-500', border: 'border-amber-500 shadow-[0_0_15px_rgba(245,158,11,0.2)]', bg: 'bg-amber-500/5' };
+        if (diffDays <= 7) {
+            return { status: 'UPCOMING', priority: 2, days: diffDays, nextDate, isPaid: false, targetMonthYear, color: 'text-amber-500', border: 'border-amber-500 shadow-[0_0_15px_rgba(245,158,11,0.2)]', bg: 'bg-amber-500/5' };
         }
 
-        return { status: 'NORMAL', priority: 3, days: diffDays, nextDate, isPaid, color: 'text-sky-500', border: 'border-slate-800', bg: 'bg-slate-900' };
+        return { status: 'NORMAL', priority: 3, days: diffDays, nextDate, isPaid, targetMonthYear, color: 'text-sky-500', border: 'border-slate-800', bg: 'bg-slate-900' };
     },
 
     toggleWillTecViewMode(mode) {
@@ -2941,7 +2992,7 @@ const AppLogic = {
                 currencyField.disabled = false;
             }
         }
-    }
+    },
 }
 
 window.AppLogic = AppLogic;
