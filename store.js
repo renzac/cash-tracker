@@ -204,6 +204,27 @@ const Store = {
         }
     },
 
+    async ensureLatestData() {
+        if (this.syncBlocked || !supabaseClient) return;
+        try {
+            const cloudTimeStr = await this.getLatestTimestamp();
+            if (cloudTimeStr && this.data.lastSync) {
+                const cloudDate = new Date(cloudTimeStr);
+                const localDate = new Date(this.data.lastSync);
+                if (cloudDate > localDate) {
+                    console.log("Store: Newer data found in cloud. Syncing before mutation...");
+                    const status = await this.loadFromCloud();
+                    if (status !== 'SUCCESS' && status !== 'EMPTY') {
+                        throw new Error("Could not fetch latest cloud data.");
+                    }
+                }
+            }
+        } catch (e) {
+            console.error("ensureLatestData failed:", e);
+            throw new Error("Sync failed. Please check connection.");
+        }
+    },
+
     async saveToCloud() {
         if (this.syncBlocked) {
             console.warn("Save blocked: No verified cloud connection this session.");
@@ -235,6 +256,7 @@ const Store = {
 
     // Transaction Logic
     async addTransaction(tx) {
+        await this.ensureLatestData();
         tx.id = Date.now();
         this.data.transactions.unshift(tx);
         this._applyBalance(tx);
@@ -243,6 +265,7 @@ const Store = {
     },
 
     async deleteTransaction(id) {
+        await this.ensureLatestData();
         const tx = this.data.transactions.find(t => t.id === id);
         if (tx) {
             this._reverseBalance(tx);
@@ -252,6 +275,7 @@ const Store = {
     },
 
     async updateTransaction(id, updatedTx) {
+        await this.ensureLatestData();
         const index = this.data.transactions.findIndex(t => t.id === id);
         if (index !== -1) {
             const oldTx = this.data.transactions[index];
@@ -367,17 +391,20 @@ const Store = {
     },
 
     async addLedgerGroup(name) {
+        await this.ensureLatestData();
         const id = Date.now();
         this.data.ledgerGroups.push({ id, name, enabled: true });
         await this.save();
     },
 
     async deleteLedgerGroup(id) {
+        await this.ensureLatestData();
         this.data.ledgerGroups = this.data.ledgerGroups.filter(g => g.id !== id);
         await this.save();
     },
 
     async updateLedgerGroup(id, name) {
+        await this.ensureLatestData();
         const group = this.data.ledgerGroups.find(g => g.id === id);
         if (group) {
             group.name = name;
@@ -386,6 +413,7 @@ const Store = {
     },
 
     async addLedger(name, groupId, openingBalance = 0) {
+        await this.ensureLatestData();
         const id = Date.now();
         const ob = parseFloat(openingBalance) || 0;
         this.data.ledgers.push({
@@ -395,6 +423,7 @@ const Store = {
     },
 
     async updateLedger(id, name, groupId, openingBalance) {
+        await this.ensureLatestData();
         const ledger = this.data.ledgers.find(l => l.id === id);
         if (ledger) {
             ledger.name = name;
@@ -405,11 +434,13 @@ const Store = {
     },
 
     async deleteLedger(id) {
+        await this.ensureLatestData();
         this.data.ledgers = this.data.ledgers.filter(l => l.id !== id);
         await this.save();
     },
 
     async addAccount(name, openingBalance = 0) {
+        await this.ensureLatestData();
         const id = Date.now();
         const ob = parseFloat(openingBalance) || 0;
         this.data.accounts.push({
@@ -419,6 +450,7 @@ const Store = {
     },
 
     async updateAccount(id, name, openingBalance) {
+        await this.ensureLatestData();
         const acc = this.data.accounts.find(a => a.id === id);
         if (acc) {
             acc.name = name;
@@ -428,6 +460,7 @@ const Store = {
     },
 
     async toggleStatus(type, id) {
+        await this.ensureLatestData();
         const item = this.data[type].find(i => i.id === id);
         if (item) {
             item.enabled = !item.enabled;
@@ -436,6 +469,7 @@ const Store = {
     },
 
     async updateUserPassword(id, newPass) {
+        await this.ensureLatestData();
         const user = this.data.users.find(u => u.id === id);
         if (user) {
             user.password = newPass;
@@ -445,6 +479,7 @@ const Store = {
 
     // --- LOAN PORTFOLIO METHODS ---
     async addLoan(loan) {
+        await this.ensureLatestData();
         loan.id = crypto.randomUUID();
         if (!loan.created_at) loan.created_at = new Date().toISOString();
         if (loan.is_active === undefined) loan.is_active = true;
@@ -467,6 +502,7 @@ const Store = {
     },
 
     async updateLoan(id, updatedLoan) {
+        await this.ensureLatestData();
         const index = this.data.loans.findIndex(l => l.id === id);
         if (index !== -1) {
             this.data.loans[index] = { ...this.data.loans[index], ...updatedLoan };
@@ -475,12 +511,14 @@ const Store = {
     },
 
     async deleteLoan(id) {
+        await this.ensureLatestData();
         this.data.loans = this.data.loans.filter(l => l.id !== id);
         this.data.loanPayments = this.data.loanPayments.filter(p => p.loan_id !== id);
         await this.save();
     },
 
     async markLoanPaid(loanId, monthYear) {
+        await this.ensureLatestData();
         // monthYear format: 'YYYY-MM'
         const existing = this.data.loanPayments.find(p => p.loan_id === loanId && p.month_year === monthYear);
         if (!existing) {
@@ -497,6 +535,7 @@ const Store = {
     },
 
     async unmarkLoanPaid(loanId, monthYear) {
+        await this.ensureLatestData();
         this.data.loanPayments = this.data.loanPayments.filter(p => !(p.loan_id === loanId && p.month_year === monthYear));
         await this.save();
     },

@@ -22,6 +22,13 @@ const AppLogic = {
         // Setup periodic sync check (every 2 minutes)
         setInterval(() => this.checkForUpdates(), 120000);
 
+        // Check for updates when tab regains focus (mobile unlocking or tab switching)
+        document.addEventListener('visibilitychange', () => {
+            if (document.visibilityState === 'visible') {
+                this.checkForUpdates();
+            }
+        });
+
         // Make sync indicator clickable for manual refresh
         const syncArea = document.getElementById('sync-status')?.parentElement;
         if (syncArea) {
