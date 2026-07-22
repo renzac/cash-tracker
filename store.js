@@ -38,6 +38,9 @@ const Store = {
             { id: 4, name: 'Cash in Hand', balance: 50.000, enabled: true }
         ],
         transactions: [],
+        contraIn: [],
+        expenses: [],
+        categories: [],
         auth: {
             currentUser: null,
             rememberMe: false,
@@ -128,6 +131,9 @@ const Store = {
     },
 
     async save() {
+        // Track when data was last modified locally
+        this.data.lastModified = new Date().toISOString();
+
         // 1. Save device-local state (Auth)
         localStorage.setItem(DEVICE_KEY, JSON.stringify(this.data.auth));
 
@@ -263,7 +269,10 @@ const Store = {
             if (l.groupId > 2) l.balance = l.openingBalance || 0;
         });
 
-        const sortedTxs = [...this.data.transactions].sort((a, b) => a.id - b.id);
+        const sortedTxs = [...this.data.transactions].sort((a, b) => {
+            if (a.date !== b.date) return a.date.localeCompare(b.date);
+            return a.id - b.id;
+        });
         sortedTxs.forEach(tx => {
             const acc = this.data.accounts.find(a => a.id == tx.accountId);
             const led = this.data.ledgers.find(l => l.id == tx.ledgerId);
@@ -490,5 +499,5 @@ const Store = {
     async unmarkLoanPaid(loanId, monthYear) {
         this.data.loanPayments = this.data.loanPayments.filter(p => !(p.loan_id === loanId && p.month_year === monthYear));
         await this.save();
-    }
+    },
 }

@@ -202,14 +202,21 @@ const AppLogic = {
         if (ledgerForm) {
             ledgerForm.onsubmit = async (e) => {
                 e.preventDefault();
-                const name = document.getElementById('ledger-name').value;
-                const groupId = document.getElementById('ledger-group-select').value;
-                const ob = document.getElementById('ledger-opening-balance').value;
-                if (name && groupId) {
-                    await Store.addLedger(name, groupId, ob);
-                    ledgerForm.reset();
-                    await this.renderAll();
-                    Auth.showToast("Ledger Added");
+                if (Store.syncBlocked) { Auth.showToast("Offline: Read-Only mode. Cannot save changes.", "error"); return; }
+                const submitBtn = e.target.querySelector('button[type="submit"]');
+                if (submitBtn) submitBtn.disabled = true;
+                try {
+                    const name = document.getElementById('ledger-name').value;
+                    const groupId = document.getElementById('ledger-group-select').value;
+                    const ob = document.getElementById('ledger-opening-balance').value;
+                    if (name && groupId) {
+                        await Store.addLedger(name, groupId, ob);
+                        ledgerForm.reset();
+                        await this.renderAll();
+                        Auth.showToast("Ledger Added");
+                    }
+                } finally {
+                    if (submitBtn) submitBtn.disabled = false;
                 }
             };
         }
@@ -219,12 +226,19 @@ const AppLogic = {
         if (groupForm) {
             groupForm.onsubmit = async (e) => {
                 e.preventDefault();
-                const name = document.getElementById('group-name').value;
-                if (name) {
-                    await Store.addLedgerGroup(name);
-                    groupForm.reset();
-                    await this.renderAll();
-                    Auth.showToast("Group Created");
+                if (Store.syncBlocked) { Auth.showToast("Offline: Read-Only mode. Cannot save changes.", "error"); return; }
+                const submitBtn = e.target.querySelector('button[type="submit"]');
+                if (submitBtn) submitBtn.disabled = true;
+                try {
+                    const name = document.getElementById('group-name').value;
+                    if (name) {
+                        await Store.addLedgerGroup(name);
+                        groupForm.reset();
+                        await this.renderAll();
+                        Auth.showToast("Group Created");
+                    }
+                } finally {
+                    if (submitBtn) submitBtn.disabled = false;
                 }
             };
         }
@@ -234,13 +248,20 @@ const AppLogic = {
         if (accForm) {
             accForm.onsubmit = async (e) => {
                 e.preventDefault();
-                const name = document.getElementById('account-name').value;
-                const ob = document.getElementById('account-opening-balance').value;
-                if (name) {
-                    await Store.addAccount(name, ob);
-                    accForm.reset();
-                    await this.renderAll();
-                    Auth.showToast("Account Created");
+                if (Store.syncBlocked) { Auth.showToast("Offline: Read-Only mode. Cannot save changes.", "error"); return; }
+                const submitBtn = e.target.querySelector('button[type="submit"]');
+                if (submitBtn) submitBtn.disabled = true;
+                try {
+                    const name = document.getElementById('account-name').value;
+                    const ob = document.getElementById('account-opening-balance').value;
+                    if (name) {
+                        await Store.addAccount(name, ob);
+                        accForm.reset();
+                        await this.renderAll();
+                        Auth.showToast("Account Created");
+                    }
+                } finally {
+                    if (submitBtn) submitBtn.disabled = false;
                 }
             };
         }
@@ -248,8 +269,24 @@ const AppLogic = {
 
 
     async handleTransactionSubmit() {
-        const tx = {
-            date: document.getElementById('tx-date').value,
+        if (Store.syncBlocked) {
+            Auth.showToast("Offline: Read-Only mode. Cannot save changes.", "error");
+            return;
+        }
+
+        const saveBtn = document.getElementById('save-tx-btn');
+        if (saveBtn) {
+            saveBtn.disabled = true;
+            saveBtn.classList.add('opacity-50', 'cursor-not-allowed');
+            const originalHtml = saveBtn.innerHTML;
+            saveBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i><span>Saving...</span>';
+            // Store original html on the element for restoration
+            saveBtn.dataset.originalHtml = originalHtml;
+        }
+
+        try {
+            const tx = {
+                date: document.getElementById('tx-date').value,
             type: document.getElementById('tx-type').value,
             accountId: document.getElementById('tx-account').value,
             ledgerId: document.getElementById('tx-ledger').value,
@@ -335,6 +372,15 @@ const AppLogic = {
             Auth.showToast(`Debt transferred from ${from.name} to ${to.name}`);
         } else {
             Auth.showToast("Entry Saved");
+        }
+        
+        } finally {
+            const saveBtn = document.getElementById('save-tx-btn');
+            if (saveBtn && saveBtn.dataset.originalHtml) {
+                saveBtn.disabled = false;
+                saveBtn.classList.remove('opacity-50', 'cursor-not-allowed');
+                saveBtn.innerHTML = saveBtn.dataset.originalHtml;
+            }
         }
     },
 
@@ -624,7 +670,21 @@ const AppLogic = {
     },
 
     async saveTxEdit(id) {
-        const updated = {
+        if (Store.syncBlocked) {
+            Auth.showToast("Offline: Read-Only mode. Cannot save changes.", "error");
+            return;
+        }
+
+        const updateBtn = document.querySelector(`button[onclick="window.AppLogic.saveTxEdit(${id})"]`);
+        if (updateBtn) {
+            updateBtn.disabled = true;
+            updateBtn.classList.add('opacity-50', 'cursor-not-allowed');
+            updateBtn.dataset.originalHtml = updateBtn.innerHTML;
+            updateBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i><span>Updating...</span>';
+        }
+
+        try {
+            const updated = {
             date: document.getElementById('edit-tx-date').value,
             type: document.getElementById('edit-tx-type').value,
             accountId: document.getElementById('edit-tx-account').value,
@@ -690,7 +750,15 @@ const AppLogic = {
         await Store.updateTransaction(id, updated);
         this.modalContainer.classList.add('hidden');
         await this.renderAll();
-        Auth.showToast("Transaction Updated");
+        Auth.showToast("Entry Updated");
+        } finally {
+            const updateBtn = document.querySelector(`button[onclick="window.AppLogic.saveTxEdit(${id})"]`);
+            if (updateBtn && updateBtn.dataset.originalHtml) {
+                updateBtn.disabled = false;
+                updateBtn.classList.remove('opacity-50', 'cursor-not-allowed');
+                updateBtn.innerHTML = updateBtn.dataset.originalHtml;
+            }
+        }
     },
 
     renderLedgers() {
