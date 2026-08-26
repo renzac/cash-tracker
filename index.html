@@ -176,10 +176,11 @@
                                     <option value="expense" class="text-rose-400">Expense</option>
                                     <option value="income" class="text-emerald-400">Income</option>
                                     <option value="contra" class="text-sky-400">Contra</option>
+                                    <option value="passthrough" class="text-violet-400">Pass-Through</option>
                                 </select>
                             </div>
                             <div id="ledger-field" class="space-y-1">
-                                <label class="text-xs text-slate-500 ml-1">Ledger</label>
+                                <label id="tx-ledger-label" class="text-xs text-slate-500 ml-1">Ledger</label>
                                 <select id="tx-ledger"
                                     class="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 focus:outline-none focus:ring-1 focus:ring-sky-500 mono-select">
                                     <option value="">Select Ledger</option>
@@ -197,6 +198,13 @@
                                 <select id="tx-to"
                                     class="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 focus:outline-none focus:ring-1 focus:ring-sky-500 mono-select">
                                     <option value="">Select Target</option>
+                                </select>
+                            </div>
+                            <div id="via-person-field" class="hidden space-y-1">
+                                <label class="text-xs text-slate-500 ml-1">Via Person (Agent)</label>
+                                <select id="tx-via"
+                                    class="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 focus:outline-none focus:ring-1 focus:ring-sky-500 mono-select">
+                                    <option value="">Select Agent</option>
                                 </select>
                             </div>
                             <div class="space-y-1">

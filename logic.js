@@ -190,10 +190,16 @@ const AppLogic = {
         const txType = document.getElementById('tx-type');
         if (txType) {
             txType.onchange = () => {
-                const isContra = txType.value === 'contra';
+                const val = txType.value;
+                const isContra = val === 'contra';
+                const isPassthrough = val === 'passthrough';
                 document.getElementById('ledger-field').classList.toggle('hidden', isContra);
                 document.getElementById('contra-to-field').classList.toggle('hidden', !isContra);
-                document.getElementById('tx-account-label').textContent = isContra ? 'From Source' : 'Account';
+                document.getElementById('via-person-field')?.classList.add('hidden');
+                const lbl = document.getElementById('tx-account-label');
+                if (lbl) lbl.textContent = isContra ? 'From Source' : (isPassthrough ? 'Paid Via' : 'Account');
+                const lLabel = document.getElementById('tx-ledger-label');
+                if (lLabel) lLabel.textContent = isPassthrough ? 'Expense Ledger' : 'Ledger';
                 this.populateDropdowns();
             };
         }
@@ -292,9 +298,10 @@ const AppLogic = {
         }
 
         try {
-            const tx = {
-                date: document.getElementById('tx-date').value,
-            type: document.getElementById('tx-type').value,
+        const txTypeVal = document.getElementById('tx-type').value;
+        const tx = {
+            date: document.getElementById('tx-date').value,
+            type: txTypeVal,
             accountId: document.getElementById('tx-account').value,
             ledgerId: document.getElementById('tx-ledger').value,
             toId: document.getElementById('tx-to').value,
@@ -302,8 +309,14 @@ const AppLogic = {
             remark: document.getElementById('tx-remark').value
         };
 
-        if (!tx.amount || !tx.accountId || (tx.type === 'contra' ? !tx.toId : !tx.ledgerId)) {
+        const missingField = !tx.amount || !tx.accountId ||
+            (tx.type === 'contra' ? !tx.toId : !tx.ledgerId);
+        if (missingField) {
             Auth.showToast("Please fill required fields", "error");
+            return;
+        }
+        if (tx.type === 'passthrough' && tx.accountId == tx.ledgerId) {
+            Auth.showToast("Paid Via and Expense Ledger cannot be the same", "error");
             return;
         }
 
@@ -311,6 +324,12 @@ const AppLogic = {
 
         let fromType = 'account';
         let toType = 'account';
+
+        if (tx.type === 'passthrough') {
+            const accList = Store.data.accounts.map(a => String(a.id));
+            tx.fromType = accList.includes(String(tx.accountId)) ? 'account' : 'ledger';
+            tx.toType = 'ledger';
+        }
 
         // --- Contra Validations ---
         if (tx.type === 'contra') {
@@ -377,6 +396,10 @@ const AppLogic = {
             const from = Store.data.ledgers.find(l => l.id == tx.accountId);
             const to = Store.data.ledgers.find(l => l.id == tx.toId);
             Auth.showToast(`Debt transferred from ${from.name} to ${to.name}`);
+        } else if (tx.type === 'passthrough') {
+            const via = Store.data.ledgers.find(l => l.id == tx.viaLedgerId);
+            const exp = Store.data.ledgers.find(l => l.id == tx.ledgerId);
+            Auth.showToast(`Pass-Through saved: ${via?.name || 'Agent'} → ${exp?.name || 'Expense'}`);
         } else {
             Auth.showToast("Entry Saved");
         }
@@ -481,14 +504,30 @@ const AppLogic = {
 
         const optionsG = '<option value="">Select Group</option>' + groups.map(g => `<option value="${g.id}">${g.name}</option>`).join('');
 
+        const viaSelect = document.getElementById('tx-via');
+        const lLabel = document.getElementById('tx-ledger-label');
+
+        // Via-person options: rolling ledgers only (Temp Cash, Investments, etc.)
+        const optionsVia = '<option value="">Select Agent / Person</option>' +
+            ledgers.filter(l => l.groupId > 2).map(l => {
+                const info = getLedgerInfo(l);
+                return `<option value="${l.id}" style="color: ${info.color}">${info.text}</option>`;
+            }).join('');
+
         if (type === 'contra') {
             if (aSelect) aSelect.innerHTML = optionsCombined;
             if (toSelect) toSelect.innerHTML = optionsCombined;
             if (aLabel) aLabel.textContent = "From (Source)";
             if (toLabel) toLabel.textContent = "To (Destination)";
+            if (lLabel) lLabel.textContent = "Ledger";
+        } else if (type === 'passthrough') {
+            if (aSelect) aSelect.innerHTML = optionsCombined;
+            if (aLabel) aLabel.textContent = "Paid Via";
+            if (lLabel) lLabel.textContent = "Expense Ledger";
         } else {
             if (aSelect) aSelect.innerHTML = optionsA_Pure;
             if (aLabel) aLabel.textContent = "Account";
+            if (lLabel) lLabel.textContent = "Ledger";
         }
 
         if (lSelect) lSelect.innerHTML = optionsL;
@@ -519,7 +558,7 @@ const AppLogic = {
         if (searchQuery) {
             txs = txs.filter(t => {
                 const ledgerName = Store.data.ledgers.find(l => l.id == t.ledgerId)?.name.toLowerCase() || "";
-                const accName = Store.data.accounts.find(a => a.id == t.accountId)?.name.toLowerCase() || "";
+                const accName = (Store.data.accounts.find(a => a.id == t.accountId)?.name || Store.data.ledgers.find(l => l.id == t.accountId)?.name || "").toLowerCase();
                 const toName = (Store.data.accounts.find(a => a.id == t.toId)?.name || Store.data.ledgers.find(l => l.id == t.toId)?.name || "").toLowerCase();
                 const remark = (t.remark || "").toLowerCase();
                 return ledgerName.includes(searchQuery) || accName.includes(searchQuery) || toName.includes(searchQuery) || remark.includes(searchQuery);
@@ -532,13 +571,38 @@ const AppLogic = {
         }
 
         list.innerHTML = txs.map(t => {
-            const acc = Store.data.accounts.find(a => a.id == t.accountId)?.name || 'Unknown';
-            const cat = t.type === 'contra'
-                ? (Store.data.accounts.find(a => a.id == t.toId)?.name || Store.data.ledgers.find(l => l.id == t.toId)?.name || 'Target')
-                : (Store.data.ledgers.find(l => l.id == t.ledgerId)?.name || 'General');
+            const fromName = Store.data.accounts.find(a => a.id == t.accountId)?.name ||
+                             Store.data.ledgers.find(l => l.id == t.accountId)?.name || 'Account';
+            let title = '';
+            let subtitle = '';
 
-            const colorClass = t.type === 'expense' ? 'text-rose-400' : (t.type === 'income' ? 'text-emerald-400' : 'text-sky-400');
-            const icon = t.type === 'expense' ? 'arrow-down' : (t.type === 'income' ? 'arrow-up' : 'exchange-alt');
+            if (t.type === 'contra') {
+                const toName = Store.data.accounts.find(a => a.id == t.toId)?.name ||
+                               Store.data.ledgers.find(l => l.id == t.toId)?.name || 'Target';
+                title = `${fromName} → ${toName}`;
+            } else if (t.type === 'passthrough') {
+                const expName = Store.data.ledgers.find(l => l.id == t.ledgerId)?.name || 'Expense';
+                title = expName;
+                subtitle = `<span class="text-violet-400/80 text-xs ml-1 font-medium">via ${fromName}</span>`;
+            } else if (t.type === 'income') {
+                const ledName = Store.data.ledgers.find(l => l.id == t.ledgerId)?.name || 'Income';
+                title = ledName;
+                subtitle = `<span class="text-slate-500 text-xs ml-1">to ${fromName}</span>`;
+            } else {
+                const ledName = Store.data.ledgers.find(l => l.id == t.ledgerId)?.name || 'Expense';
+                title = ledName;
+                subtitle = `<span class="text-slate-500 text-xs ml-1">via ${fromName}</span>`;
+            }
+
+            const colorClass = t.type === 'expense' ? 'text-rose-400' :
+                               t.type === 'income' ? 'text-emerald-400' :
+                               t.type === 'passthrough' ? 'text-violet-400' :
+                               'text-sky-400';
+            const icon = t.type === 'expense' ? 'arrow-down' :
+                         t.type === 'income' ? 'arrow-up' :
+                         t.type === 'passthrough' ? 'random' :
+                         'exchange-alt';
+            const amountPrefix = (t.type === 'expense' || t.type === 'passthrough') ? '-' : (t.type === 'income' ? '+' : '');
 
             return `
                 <div class="tx-card bg-slate-900 border border-slate-800 rounded-2xl p-4 flex items-center justify-between group">
@@ -547,12 +611,12 @@ const AppLogic = {
                             <i class="fas fa-${icon}"></i>
                         </div>
                         <div>
-                            <div class="font-medium">${cat} <span class="text-slate-500 text-xs ml-1">via ${acc}</span></div>
+                            <div class="font-medium">${title} ${subtitle}</div>
                             <div class="text-xs text-slate-500">${t.remark || 'No remark'}</div>
                         </div>
                     </div>
                     <div class="text-right">
-                        <div class="font-orbitron font-bold ${colorClass}">${t.type === 'expense' ? '-' : '+'}${t.amount.toFixed(3)}</div>
+                        <div class="font-orbitron font-bold ${colorClass}">${amountPrefix}${t.amount.toFixed(3)}</div>
                         <div class="flex justify-end space-x-1 md:opacity-0 md:group-hover:opacity-100 transition-all">
                             <button onclick="window.AppLogic.editTx(${t.id})" class="p-3 text-slate-500 hover:text-sky-500 transition-colors cursor-pointer" title="Edit">
                                 <i class="fas fa-edit text-sm"></i>
@@ -598,6 +662,7 @@ const AppLogic = {
                             <option value="expense" ${t.type === 'expense' ? 'selected' : ''}>Expense</option>
                             <option value="income" ${t.type === 'income' ? 'selected' : ''}>Income</option>
                             <option value="contra" ${t.type === 'contra' ? 'selected' : ''}>Contra</option>
+                            <option value="passthrough" ${t.type === 'passthrough' ? 'selected' : ''}>Pass-Through</option>
                         </select>
                     </div>
                     <div id="edit-ledger-field" class="space-y-1 ${t.type === 'contra' ? 'hidden' : ''}">
@@ -607,9 +672,9 @@ const AppLogic = {
                         </select>
                     </div>
                     <div class="space-y-1">
-                        <label id="edit-tx-account-label" class="text-xs text-slate-500 ml-1">${t.type === 'contra' ? 'From Source' : 'Account'}</label>
+                        <label id="edit-tx-account-label" class="text-xs text-slate-500 ml-1">${t.type === 'contra' ? 'From Source' : (t.type === 'passthrough' ? 'Paid Via' : 'Account')}</label>
                         <select id="edit-tx-account" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5">
-                            ${t.type === 'contra'
+                            ${(t.type === 'contra' || t.type === 'passthrough')
                 ? accounts.map(a => `<option value="${a.id}" ${a.id == t.accountId ? 'selected' : ''}>Bank: ${a.name}</option>`).join('') +
                 ledgers.map(l => `<option value="${l.id}" ${l.id == t.accountId ? 'selected' : ''}>Ledger: ${l.name}</option>`).join('')
                 : accounts.map(a => `<option value="${a.id}" ${a.id == t.accountId ? 'selected' : ''}>${a.name}</option>`).join('')
@@ -654,11 +719,8 @@ const AppLogic = {
         ledgerField.classList.toggle('hidden', type === 'contra');
         contraField.classList.toggle('hidden', type !== 'contra');
 
-        if (accountLabel) accountLabel.textContent = type === 'contra' ? 'From Source' : 'Account';
+        if (accountLabel) accountLabel.textContent = type === 'contra' ? 'From Source' : (type === 'passthrough' ? 'Paid Via' : 'Account');
 
-        // Optional: Re-populate accountSelect if type changes to/from contra in edit modal
-        // For now, the user can just close and re-open edit if they change type radically, 
-        // but let's try to handle it.
         if (accountSelect) {
             const currentVal = accountSelect.value;
             const ledgers = Store.data.ledgers.filter(l => l.enabled || l.id == currentVal);
@@ -667,7 +729,7 @@ const AppLogic = {
             const getLedgerText = l => `${l.name}${l.groupId > 2 ? ` [${l.balance >= 0 ? 'Recv' : 'Pay'}: ${Math.abs(l.balance).toFixed(3)}]` : ''}`;
             const getAccountText = a => `${a.name} [${a.balance.toFixed(3)}]`;
 
-            if (type === 'contra') {
+            if (type === 'contra' || type === 'passthrough') {
                 accountSelect.innerHTML = accounts.map(a => `<option value="${a.id}" ${a.id == currentVal ? 'selected' : ''}>Bank: ${getAccountText(a)}</option>`).join('') +
                     ledgers.map(l => `<option value="${l.id}" ${l.id == currentVal ? 'selected' : ''}>Ledger: ${getLedgerText(l)}</option>`).join('');
             } else {
@@ -701,9 +763,21 @@ const AppLogic = {
             remark: document.getElementById('edit-tx-remark').value
         };
 
-        if (!updated.amount || !updated.accountId || (updated.type !== 'contra' && !updated.ledgerId) || (updated.type === 'contra' && !updated.toId)) {
+        const editMissingField = !updated.amount || !updated.accountId ||
+            (updated.type === 'contra' ? !updated.toId : !updated.ledgerId);
+        if (editMissingField) {
             Auth.showToast("Please fill all fields", "error");
             return;
+        }
+        if (updated.type === 'passthrough' && updated.accountId == updated.ledgerId) {
+            Auth.showToast("Paid Via and Expense Ledger cannot be the same", "error");
+            return;
+        }
+
+        if (updated.type === 'passthrough') {
+            const accList = Store.data.accounts.map(a => String(a.id));
+            updated.fromType = accList.includes(String(updated.accountId)) ? 'account' : 'ledger';
+            updated.toType = 'ledger';
         }
 
         // --- Contra Validations ---
@@ -1212,17 +1286,21 @@ const AppLogic = {
             let isRelevant = false;
             if (type === 'account') {
                 if (t.type === 'contra') {
-                    const from = Store.data.accounts.find(a => String(a.id) === tFromId);
-                    const to = Store.data.accounts.find(a => String(a.id) === tToId);
-                    isRelevant = (tFromId === targetId && from) || (tToId === targetId && to);
+                    const fromIsAcc = Store.data.accounts.some(a => String(a.id) === tFromId);
+                    const toIsAcc = Store.data.accounts.some(a => String(a.id) === tToId);
+                    isRelevant = (tFromId === targetId && fromIsAcc) || (tToId === targetId && toIsAcc);
+                } else if (t.type === 'passthrough') {
+                    // accountId can be a bank account or ledger
+                    const fromExists = Store.data.accounts.some(a => String(a.id) === tFromId) || Store.data.ledgers.some(l => String(l.id) === tFromId);
+                    isRelevant = (tFromId === targetId && fromExists);
                 } else {
                     isRelevant = tFromId === targetId;
                 }
             } else {
-                if (t.type === 'contra') {
+                if (t.type === 'contra' || t.type === 'passthrough') {
                     const from = Store.data.ledgers.find(l => String(l.id) === tFromId);
-                    const to = Store.data.ledgers.find(l => String(l.id) === tToId);
-                    isRelevant = (tFromId === targetId && from) || (tToId === targetId && to);
+                    const to = t.type === 'contra' ? Store.data.ledgers.find(l => String(l.id) === tToId) : Store.data.ledgers.find(l => String(l.id) === tLedId);
+                    isRelevant = (tFromId === targetId && from) || ((t.type === 'contra' ? tToId : tLedId) === targetId && to);
                 } else {
                     isRelevant = tLedId === targetId;
                 }
@@ -1233,18 +1311,18 @@ const AppLogic = {
                 const isFilterAcc = advancedFilterId.startsWith('acc_');
                 const filterId = advancedFilterId.split('_')[1];
                 if (isFilterAcc) {
-                    if (t.type === 'contra') {
+                    if (t.type === 'contra' || t.type === 'passthrough') {
                         const fromAcc = Store.data.accounts.find(a => String(a.id) === tFromId);
-                        if (fromAcc) return tFromId === filterId || tToId === filterId;
-                        return false;
+                        const toAcc = t.type === 'contra' ? Store.data.accounts.find(a => String(a.id) === tToId) : null;
+                        return (tFromId === filterId && fromAcc) || (tToId === filterId && toAcc);
                     } else {
                         return tFromId === filterId;
                     }
                 } else {
-                    if (t.type === 'contra') {
+                    if (t.type === 'contra' || t.type === 'passthrough') {
                         const fromLed = Store.data.ledgers.find(l => String(l.id) === tFromId);
-                        if (fromLed) return tFromId === filterId || tToId === filterId;
-                        return false;
+                        const toLed = t.type === 'contra' ? Store.data.ledgers.find(l => String(l.id) === tToId) : Store.data.ledgers.find(l => String(l.id) === tLedId);
+                        return (tFromId === filterId && fromLed) || ((t.type === 'contra' ? tToId : tLedId) === filterId && toLed);
                     } else {
                         return tLedId === filterId;
                     }
@@ -1270,16 +1348,32 @@ const AppLogic = {
                 else if (t.type === 'contra') {
                     if (tFromId === targetId) isOut = true;
                     if (tToId === targetId) isIn = true;
+                } else if (t.type === 'passthrough') {
+                    isOut = (tFromId === targetId); // cash leaves the paid-from account
                 }
             } else {
-                // Ledger Statement: KD leaving pocket/debt decreasing = OUT
-                // Ledger Statement: KD coming in/debt increasing = IN
+                // Ledger Statement
                 if (t.type === 'expense') isOut = (tLedId === targetId);
                 else if (t.type === 'income') isIn = (tLedId === targetId);
                 else if (t.type === 'contra') {
-                    // Moving debt from Source (tFromId) to Target (tToId)
-                    if (tFromId === targetId) isIn = true; // Source gets balance + KD (Debt decreases/IN to pocket)
-                    if (tToId === targetId) isOut = true; // Target gets balance - KD (Debt increases/OUT from pocket)
+                    const fromType = t.fromType || (Store.data.accounts.some(a => a.id == t.accountId) ? 'account' : 'ledger');
+                    const toType = t.toType || (Store.data.accounts.some(a => a.id == t.toId) ? 'account' : 'ledger');
+                    const isL2L = (fromType === 'ledger' && toType === 'ledger');
+
+                    if (isL2L) {
+                        // Ledger-to-Ledger contra: source gains balance (Out from debt perspective), destination loses
+                        if (tFromId === targetId) isOut = true;
+                        if (tToId === targetId) isIn = true;
+                    } else {
+                        if (tFromId === targetId) isIn = true;
+                        if (tToId === targetId) isOut = true;
+                    }
+                } else if (t.type === 'passthrough') {
+                    // Pass-through: BOTH ledgers decrease in balance
+                    // Source ledger (accountId): balance decreases → Out
+                    // Dest ledger (ledgerId): balance decreases → Out
+                    if (tFromId === targetId) isOut = true;
+                    if (tLedId === targetId) isOut = true;
                 }
             }
             return { isIn, isOut };
@@ -1391,20 +1485,40 @@ const AppLogic = {
                                 ` : statementRows.map(t => {
             let relatedName = '-';
             if (type === 'account') {
-                const led = Store.data.ledgers.find(l => l.id == t.ledgerId);
-                if (led) relatedName = led.name;
-                else if (t.type === 'contra') {
-                    const otherAccId = t.accountId == id ? t.toId : t.accountId;
-                    const otherAcc = Store.data.accounts.find(a => a.id == otherAccId);
+                if (t.type === 'contra') {
+                    const otherAccId = String(t.accountId) == String(id) ? t.toId : t.accountId;
+                    const otherAcc = Store.data.accounts.find(a => a.id == otherAccId) || Store.data.ledgers.find(l => l.id == otherAccId);
                     relatedName = otherAcc ? `Trf: ${otherAcc.name}` : 'Transfer';
+                } else if (t.type === 'passthrough') {
+                    const led = Store.data.ledgers.find(l => l.id == t.ledgerId);
+                    relatedName = led ? led.name : 'Expense';
+                } else {
+                    const led = Store.data.ledgers.find(l => l.id == t.ledgerId);
+                    if (led) relatedName = led.name;
                 }
             } else {
-                const acc = Store.data.accounts.find(a => a.id == t.accountId);
-                if (acc) relatedName = acc.name;
-                else if (t.type === 'contra') {
-                    const otherId = t.accountId == id ? t.toId : t.accountId;
+                // Ledger Statement
+                if (t.type === 'contra') {
+                    const otherId = String(t.accountId) == String(id) ? t.toId : t.accountId;
                     const other = Store.data.accounts.find(a => a.id == otherId) || Store.data.ledgers.find(l => l.id == otherId);
                     relatedName = other ? `Trf: ${other.name}` : 'Transfer';
+                } else if (t.type === 'passthrough') {
+                    // If viewing from-ledger (accountId), show the expense ledger name
+                    // If viewing to-ledger (ledgerId), show the from-ledger (via) name
+                    if (String(t.accountId) == String(id)) {
+                        const expLed = Store.data.ledgers.find(l => l.id == t.ledgerId);
+                        relatedName = expLed ? `Exp: ${expLed.name}` : 'Expense';
+                    } else {
+                        const viaLed = Store.data.ledgers.find(l => l.id == t.accountId) || Store.data.accounts.find(a => a.id == t.accountId);
+                        relatedName = viaLed ? `Via: ${viaLed.name}` : 'Pass-Through';
+                    }
+                } else {
+                    const acc = Store.data.accounts.find(a => a.id == t.accountId);
+                    if (acc) relatedName = acc.name;
+                    else {
+                        const fromLed = Store.data.ledgers.find(l => l.id == t.accountId);
+                        if (fromLed) relatedName = fromLed.name;
+                    }
                 }
             }
 
@@ -1510,8 +1624,22 @@ const AppLogic = {
                     const toIsLedger = to.groupId !== undefined;
 
                     if (fromIsLedger && toIsLedger) {
-                        // Ledger-to-Ledger Debt Transfer (Inversion Logic)
-                        // Net Worth Impact: (+Amount to Source) + (-Amount to Target) = 0
+                        // Ledger-to-Ledger transfer: net impact is zero
+                        impact = 0;
+                    } else {
+                        // Regular Account/Ledger Transfer
+                        if (from.groupId === undefined || from.groupId > 2) impact -= t.amount;
+                        if (to.groupId === undefined || to.groupId > 2) impact += t.amount;
+                    }
+                }
+            } else if (t.type === 'passthrough') {
+                const from = accounts.find(a => a.id == t.accountId) || Store.data.ledgers.find(l => l.id == t.accountId);
+                const to = Store.data.ledgers.find(l => l.id == t.ledgerId);
+
+                if (from && to) {
+                    const fromIsLedger = from.groupId !== undefined;
+                    if (fromIsLedger) {
+                        // Ledger-to-Ledger transfer: net impact is zero
                         impact = 0;
                     } else {
                         // Regular Account/Ledger Transfer
