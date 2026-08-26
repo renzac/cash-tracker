@@ -1,6 +1,6 @@
 :root {
-    --safe-area-top: env(safe-area-inset-top);
-    --safe-area-bottom: env(safe-area-inset-bottom);
+    --safe-area-top: env(safe-area-inset-top, 0px);
+    --safe-area-bottom: env(safe-area-inset-bottom, 0px);
 }
 
 html, body {
@@ -17,12 +17,55 @@ html, body {
     padding-top: var(--safe-area-top);
 }
 
+.pb-safe {
+    padding-bottom: var(--safe-area-bottom);
+}
+
+/* Base Form Inputs & Selects Normalization for iOS & Android */
+input, select, textarea {
+    font-size: 16px !important; /* Prevents auto-zoom on iOS Safari */
+    box-sizing: border-box !important;
+}
+
+/* Custom Select styling to eliminate iOS blue menulist arrows */
+select {
+    appearance: none !important;
+    -webkit-appearance: none !important;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%2394a3b8'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'%3E%3C/path%3E%3C/svg%3E") !important;
+    background-repeat: no-repeat !important;
+    background-position: right 0.75rem center !important;
+    background-size: 1rem !important;
+    padding-right: 2rem !important;
+}
+
+/* Date input normalization for WebKit */
+input[type="date"] {
+    appearance: none;
+    -webkit-appearance: none;
+    min-width: 0 !important;
+    max-width: 100% !important;
+    box-sizing: border-box !important;
+    display: inline-flex;
+    align-items: center;
+}
+
+input[type="date"]::-webkit-date-and-time-value {
+    text-align: left;
+    margin: 0;
+    padding: 0;
+    min-height: 1.25em;
+}
+
+input[type="date"]::-webkit-calendar-picker-indicator {
+    opacity: 0.6;
+    cursor: pointer;
+}
+
 @keyframes fade-in {
     from {
         opacity: 0;
         transform: translateY(10px);
     }
-
     to {
         opacity: 1;
         transform: translateY(0);
@@ -30,16 +73,12 @@ html, body {
 }
 
 @keyframes shake {
-
-    0%,
-    100% {
+    0%, 100% {
         transform: translateX(0);
     }
-
     25% {
         transform: translateX(-5px);
     }
-
     75% {
         transform: translateX(5px);
     }
@@ -61,7 +100,7 @@ html, body {
 }
 
 .animate-fade-in {
-    animation: fade-in 0.4s ease-out forwards;
+    animation: fade-in 0.3s ease-out forwards;
 }
 
 .animate-shake {
@@ -84,12 +123,45 @@ html, body {
 }
 
 .mobile-nav-link.active {
-    color: #38bdf8;
+    color: #38bdf8 !important;
+}
+
+/* Mobile Bottom Navigation items */
+.mobile-nav-link {
+    flex: 1 1 0 !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+    overflow: hidden !important;
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: center !important;
+    justify-content: center !important;
+    padding: 4px 1px !important;
+    text-align: center !important;
+    -webkit-tap-highlight-color: transparent;
+}
+
+.mobile-nav-link span {
+    font-size: 8px !important;
+    letter-spacing: -0.02em !important;
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+    max-width: 100% !important;
+    display: block !important;
+    line-height: 1.1 !important;
+    margin-top: 2px !important;
+}
+
+.mobile-nav-link i {
+    font-size: 15px !important;
+    line-height: 1 !important;
 }
 
 /* Custom Scrollbar */
 ::-webkit-scrollbar {
-    width: 5px;
+    width: 4px;
+    height: 4px;
 }
 
 ::-webkit-scrollbar-track {
@@ -101,11 +173,12 @@ html, body {
     border-radius: 10px;
 }
 
-/* Input Tweaks for iPhone */
-input,
-select {
-    font-size: 16px !important;
-    /* Prevents auto-zoom on iOS */
+.custom-scrollbar::-webkit-scrollbar {
+    width: 4px;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb {
+    background: rgba(56, 189, 248, 0.2);
+    border-radius: 4px;
 }
 
 /* Status Colors */
@@ -137,11 +210,6 @@ select {
 .loan-card:hover {
     border-color: rgba(56, 189, 248, 0.4);
     box-shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.5);
-}
-
-/* PB Safe Padding */
-.pb-safe {
-    padding-bottom: var(--safe-area-bottom);
 }
 
 @media print {
@@ -186,20 +254,9 @@ main header {
     z-index: 100;
 }
 
-#view-container {
-    mask-image: linear-gradient(to bottom, black 95%, transparent 100%);
-}
-
 .mono-select {
     font-family: 'JetBrains Mono', 'Fira Code', 'Courier New', monospace !important;
     font-variant-numeric: tabular-nums;
-    appearance: none;
-    -webkit-appearance: none;
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%2364748b'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'%3E%3C/path%3E%3C/svg%3E");
-    background-repeat: no-repeat;
-    background-position: right 1rem center;
-    background-size: 1.25rem;
-    padding-right: 2.5rem !important;
 }
 
 .mono-select option {
@@ -212,185 +269,98 @@ main header {
     cursor: pointer;
 }
 
-#modal-container input {
-    font-size: 16px !important;
-    /* Force no-zoom on iOS */
-}
-
 /* ─────────────────────────────────────────────
-   MOBILE — iPhone 12 Pro Max / 14 Pro Max
-   Target: 428–430 px logical width
+   RESPONSIVE MOBILE RULES (iPhone 12/14 Pro Max & all phones)
    ───────────────────────────────────────────── */
 
-/* Safe area variables */
-:root {
-    --safe-top: env(safe-area-inset-top, 0px);
-    --safe-bottom: env(safe-area-inset-bottom, 0px);
-}
-
-/* Dynamic Island / Notch clearance for the header */
+/* Header safe area */
 main > header {
-    padding-top: max(1rem, env(safe-area-inset-top));
+    padding-top: max(0.75rem, env(safe-area-inset-top, 0px));
 }
 
-/* Bottom nav — always safe on any iPhone */
+/* Bottom nav safe area */
 nav.mobile-bottom-nav {
     padding-bottom: env(safe-area-inset-bottom, 0px);
-    height: calc(3.5rem + env(safe-area-inset-bottom, 0px));
+    height: calc(3.4rem + env(safe-area-inset-bottom, 0px));
 }
 
-/* View container — account for dynamic bottom nav height */
+/* View container dynamic padding */
 @media (max-width: 1023px) {
     #view-container {
-        padding-bottom: calc(3.5rem + env(safe-area-inset-bottom, 16px) + 0.5rem);
+        padding-bottom: calc(3.5rem + env(safe-area-inset-bottom, 0px) + 0.75rem) !important;
     }
 }
 
-/* ── iPhone (≤430px) fine-tuning ── */
-@media (max-width: 430px) {
-
-    /* Header: tighter horizontal padding */
-    main > header {
-        padding-left: 0.875rem;
-        padding-right: 0.875rem;
-        padding-bottom: 0.75rem;
-    }
-
-    /* Page-level padding tighter */
+/* Mobile specific styling for all mobile screens (width <= 640px) */
+@media (max-width: 640px) {
+    /* Compact view padding */
     .view-content {
         padding: 0.75rem !important;
     }
 
-    /* Transaction form: 2-column grid on mobile */
+    /* Form card */
+    .form-card-mobile {
+        padding: 0.875rem !important;
+        border-radius: 1.25rem !important;
+    }
+
+    /* Transaction form 2-column grid */
     #transaction-form {
-        grid-template-columns: 1fr 1fr;
-        gap: 0.625rem;
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) !important;
+        gap: 0.625rem !important;
     }
 
-    /* Full-width items inside the 2-col form */
-    #transaction-form #ledger-field,
-    #transaction-form #via-person-field,
-    #transaction-form #contra-to-field,
-    #transaction-form > div:last-of-type {
-        grid-column: span 2;
-    }
-
-    /* Remark + Save button full width */
-    #transaction-form .md\:col-span-2 {
-        grid-column: span 2;
-    }
-
-    /* Form card less padding */
-    .bg-slate-900\/50.border.rounded-3xl {
-        padding: 1rem;
-        border-radius: 1.25rem;
-    }
-
-    /* Form inputs: standard comfortable height */
     #transaction-form input,
     #transaction-form select {
-        padding-top: 0.625rem;
-        padding-bottom: 0.625rem;
-        border-radius: 0.75rem;
+        height: 42px !important;
+        min-height: 42px !important;
+        padding-top: 0.5rem !important;
+        padding-bottom: 0.5rem !important;
+        padding-left: 0.75rem !important;
+        border-radius: 0.75rem !important;
+        font-size: 14px !important;
     }
 
-    /* History search row: stack vertically */
-    #view-transactions .flex.flex-col.sm\:flex-row.sm\:items-center {
-        flex-direction: column;
-        align-items: stretch;
-    }
-
-    /* History filter input row: make compact */
-    #view-transactions .flex.items-center.space-x-2 {
-        flex-wrap: wrap;
-        gap: 0.5rem;
-    }
-
-    /* Date filter: shrink */
-    #history-date-filter {
-        flex: 1;
-        min-width: 0;
-    }
-
-    /* Transaction cards: tighter padding */
+    /* Transaction card styling */
     .tx-card {
-        padding: 0.75rem;
-        border-radius: 1rem;
+        padding: 0.625rem 0.75rem !important;
+        border-radius: 0.875rem !important;
     }
 
-    /* TX card icon circle smaller */
     .tx-card .w-10 {
-        width: 2rem;
-        height: 2rem;
-        flex-shrink: 0;
+        width: 2.25rem !important;
+        height: 2.25rem !important;
+        flex-shrink: 0 !important;
     }
 
-    /* TX card font size */
-    .tx-card .font-orbitron.font-bold {
-        font-size: 0.8rem;
-    }
-
-    /* Bottom nav: reduce icon/text to fit 7 buttons cleanly */
-    nav.lg\:hidden .mobile-nav-link {
-        padding: 0.25rem 0.125rem;
-        min-width: 0;
-        flex: 1;
-    }
-
-    nav.lg\:hidden .mobile-nav-link i {
-        font-size: 1rem;
-    }
-
-    nav.lg\:hidden .mobile-nav-link span {
-        font-size: 0.55rem;
-        letter-spacing: 0.03em;
-    }
-
-    /* Modal: full-width sheet on mobile */
+    /* Statement modal mobile bottom sheet */
     #modal-container {
-        padding: 0;
-        align-items: flex-end;
+        padding: 0 !important;
+        align-items: flex-end !important;
     }
 
-    /* Statement table: tighter columns */
-    #modal-content table {
-        font-size: 0.6875rem;
+    #modal-content {
+        max-height: 92vh !important;
+        height: 90vh !important;
+        border-bottom-left-radius: 0 !important;
+        border-bottom-right-radius: 0 !important;
+        padding: 1rem !important;
     }
 
-    /* Ledger cards: 1 column */
+    /* Grid cards stack on mobile */
     #ledger-list,
     #account-list,
     #loan-list {
-        grid-template-columns: 1fr;
-        gap: 0.75rem;
+        grid-template-columns: 1fr !important;
+        gap: 0.625rem !important;
     }
 
-    /* Loans filter row: stack */
-    #view-loans .flex.flex-col.sm\:flex-row {
-        flex-direction: column;
-    }
-
-    /* Portfolio cards: stack 1 column */
-    #view-loans .grid.grid-cols-1.md\:grid-cols-2 {
-        grid-template-columns: 1fr;
-    }
-
-    /* Toast: full-width banner on mobile */
+    /* Toast container */
     #toast-container {
-        left: 0.75rem;
-        right: 0.75rem;
-        transform: none;
-    }
-
-    /* Orbitron font smaller on cards to avoid overflow */
-    .font-orbitron {
-        letter-spacing: -0.01em;
+        left: 1rem !important;
+        right: 1rem !important;
+        transform: none !important;
+        width: auto !important;
     }
 }
-
-/* ── iPhone 14 Pro Max Dynamic Island (≤430px, more top inset) ── */
-@supports (padding-top: env(safe-area-inset-top)) {
-    main > header {
-        padding-top: max(0.75rem, calc(env(safe-area-inset-top) + 0.25rem));
-    }
-}
+

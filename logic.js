@@ -645,35 +645,35 @@ const AppLogic = {
         const accounts = Store.data.accounts.filter(a => a.enabled || a.id == t.accountId || a.id == t.toId);
 
         let html = `
-            <div id="modal-content" class="bg-slate-900 w-full max-w-lg rounded-t-3xl md:rounded-3xl p-8 space-y-6 shadow-2xl border-t border-slate-800 animate-fade-in max-h-[90vh] overflow-y-auto">
-                <div class="flex items-center justify-between">
-                    <h3 class="text-xl font-bold font-orbitron text-sky-400">Edit Transaction</h3>
-                    <button onclick="document.getElementById('modal-container').classList.add('hidden')" class="text-slate-500"><i class="fas fa-times"></i></button>
+            <div id="modal-content" class="bg-slate-900 w-full max-w-lg rounded-t-3xl sm:rounded-3xl p-4 sm:p-6 lg:p-8 space-y-4 shadow-2xl border-t border-slate-800 animate-fade-in max-h-[90vh] overflow-y-auto">
+                <div class="flex items-center justify-between pb-2 border-b border-slate-800/80">
+                    <h3 class="text-lg sm:text-xl font-bold font-orbitron text-sky-400">Edit Transaction</h3>
+                    <button onclick="document.getElementById('modal-container').classList.add('hidden')" class="w-8 h-8 flex items-center justify-center rounded-full bg-slate-800/80 text-slate-400 hover:text-slate-200 transition-colors"><i class="fas fa-times text-sm"></i></button>
                 </div>
                 
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div class="space-y-1">
+                <div class="grid grid-cols-2 md:grid-cols-2 gap-3">
+                    <div class="col-span-1 min-w-0 space-y-1">
                         <label class="text-xs text-slate-500 ml-1">Date</label>
-                        <input type="date" id="edit-tx-date" value="${t.date}" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 focus:outline-none focus:ring-1 focus:ring-sky-500">
+                        <input type="date" id="edit-tx-date" value="${t.date}" class="w-full min-w-0 bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 sm:px-4 sm:py-2.5 focus:outline-none focus:ring-1 focus:ring-sky-500">
                     </div>
-                    <div class="space-y-1">
+                    <div class="col-span-1 min-w-0 space-y-1">
                         <label class="text-xs text-slate-500 ml-1">Type</label>
-                        <select id="edit-tx-type" onchange="window.AppLogic.toggleEditTxFields()" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5">
+                        <select id="edit-tx-type" onchange="window.AppLogic.toggleEditTxFields()" class="w-full min-w-0 bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 sm:px-4 sm:py-2.5 focus:outline-none focus:ring-1 focus:ring-sky-500">
                             <option value="expense" ${t.type === 'expense' ? 'selected' : ''}>Expense</option>
                             <option value="income" ${t.type === 'income' ? 'selected' : ''}>Income</option>
                             <option value="contra" ${t.type === 'contra' ? 'selected' : ''}>Contra</option>
                             <option value="passthrough" ${t.type === 'passthrough' ? 'selected' : ''}>Pass-Through</option>
                         </select>
                     </div>
-                    <div id="edit-ledger-field" class="space-y-1 ${t.type === 'contra' ? 'hidden' : ''}">
+                    <div id="edit-ledger-field" class="col-span-2 md:col-span-1 min-w-0 space-y-1 ${t.type === 'contra' ? 'hidden' : ''}">
                         <label class="text-xs text-slate-500 ml-1">Ledger</label>
-                        <select id="edit-tx-ledger" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5">
+                        <select id="edit-tx-ledger" class="w-full min-w-0 bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 sm:px-4 sm:py-2.5 focus:outline-none focus:ring-1 focus:ring-sky-500 mono-select">
                             ${ledgers.map(l => `<option value="${l.id}" ${l.id == t.ledgerId ? 'selected' : ''}>${l.name}</option>`).join('')}
                         </select>
                     </div>
-                    <div class="space-y-1">
+                    <div class="col-span-2 md:col-span-1 min-w-0 space-y-1">
                         <label id="edit-tx-account-label" class="text-xs text-slate-500 ml-1">${t.type === 'contra' ? 'From Source' : (t.type === 'passthrough' ? 'Paid Via' : 'Account')}</label>
-                        <select id="edit-tx-account" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5">
+                        <select id="edit-tx-account" class="w-full min-w-0 bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 sm:px-4 sm:py-2.5 focus:outline-none focus:ring-1 focus:ring-sky-500 mono-select">
                             ${(t.type === 'contra' || t.type === 'passthrough')
                 ? accounts.map(a => `<option value="${a.id}" ${a.id == t.accountId ? 'selected' : ''}>Bank: ${a.name}</option>`).join('') +
                 ledgers.map(l => `<option value="${l.id}" ${l.id == t.accountId ? 'selected' : ''}>Ledger: ${l.name}</option>`).join('')
@@ -681,26 +681,26 @@ const AppLogic = {
             }
                         </select>
                     </div>
-                    <div id="edit-contra-to-field" class="space-y-1 ${t.type !== 'contra' ? 'hidden' : ''}">
+                    <div id="edit-contra-to-field" class="col-span-2 md:col-span-1 min-w-0 space-y-1 ${t.type !== 'contra' ? 'hidden' : ''}">
                         <label class="text-xs text-slate-500 ml-1">To Target</label>
-                        <select id="edit-tx-to" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5">
+                        <select id="edit-tx-to" class="w-full min-w-0 bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 sm:px-4 sm:py-2.5 focus:outline-none focus:ring-1 focus:ring-sky-500 mono-select">
                             ${accounts.map(a => `<option value="${a.id}" ${a.id == t.toId ? 'selected' : ''}>Bank: ${a.name}</option>`).join('')}
                             ${ledgers.map(l => `<option value="${l.id}" ${l.id == t.toId ? 'selected' : ''}>Ledger: ${l.name}</option>`).join('')}
                         </select>
                     </div>
-                    <div class="space-y-1">
+                    <div class="col-span-2 md:col-span-1 min-w-0 space-y-1">
                         <label class="text-xs text-slate-500 ml-1">Amount</label>
-                        <input type="number" step="0.001" id="edit-tx-amount" value="${t.amount}" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 font-orbitron">
+                        <input type="number" step="0.001" id="edit-tx-amount" value="${t.amount}" class="w-full min-w-0 bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 sm:px-4 sm:py-2.5 font-orbitron">
                     </div>
-                    <div class="md:col-span-2 space-y-1">
+                    <div class="col-span-2 min-w-0 space-y-1">
                         <label class="text-xs text-slate-500 ml-1">Remark</label>
-                        <input type="text" id="edit-tx-remark" value="${t.remark || ''}" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5">
+                        <input type="text" id="edit-tx-remark" value="${t.remark || ''}" class="w-full min-w-0 bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 sm:px-4 sm:py-2.5 focus:outline-none focus:ring-1 focus:ring-sky-500">
                     </div>
                 </div>
 
-                <div class="flex space-x-3 pt-4">
-                    <button onclick="document.getElementById('modal-container').classList.add('hidden')" class="flex-1 bg-slate-800 text-slate-300 py-3 rounded-xl font-bold">Cancel</button>
-                    <button onclick="window.AppLogic.saveTxEdit(${id})" class="flex-1 bg-sky-500 text-slate-950 py-3 rounded-xl font-bold shadow-lg shadow-sky-500/20">Update Entry</button>
+                <div class="flex space-x-3 pt-3 border-t border-slate-800/80">
+                    <button onclick="document.getElementById('modal-container').classList.add('hidden')" class="flex-1 bg-slate-800 text-slate-300 py-2.5 sm:py-3 rounded-xl font-bold text-sm">Cancel</button>
+                    <button onclick="window.AppLogic.saveTxEdit(${id})" class="flex-1 bg-sky-500 text-slate-950 py-2.5 sm:py-3 rounded-xl font-bold text-sm shadow-lg shadow-sky-500/20">Update Entry</button>
                 </div>
             </div>
         `;
@@ -1414,73 +1414,78 @@ const AppLogic = {
 
         let html = `
             <div onclick="this.parentElement.classList.add('hidden')" 
-                class="fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-end md:items-center justify-center p-0 md:p-4 z-[3000]">
+                class="fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4 z-[3000]">
                 <div onclick="event.stopPropagation()" 
-                    id="modal-content" class="bg-slate-900 w-full max-w-3xl rounded-t-3xl md:rounded-3xl p-6 lg:p-8 space-y-4 shadow-2xl border-t border-slate-800 transform animate-fade-in flex flex-col max-h-[90vh]">
+                    id="modal-content" class="bg-slate-900 w-full max-w-3xl rounded-t-3xl sm:rounded-3xl p-3.5 sm:p-6 lg:p-8 flex flex-col h-[92vh] sm:h-auto sm:max-h-[90vh] shadow-2xl border-t border-slate-800 animate-fade-in">
                     
-                    <div class="flex items-center justify-between">
+                    <!-- Header -->
+                    <div class="flex items-center justify-between pb-2 border-b border-slate-800/80">
                         <div>
-                            <h2 class="text-xl font-bold font-orbitron text-slate-100">${item.name}</h2>
-                            <p class="text-[10px] text-slate-500 uppercase tracking-widest">Statement History</p>
+                            <h2 class="text-base sm:text-xl font-bold font-orbitron text-slate-100">${item.name}</h2>
+                            <p class="text-[9px] text-slate-500 uppercase tracking-widest">Statement History</p>
                         </div>
-                        <div class="flex items-center space-x-3">
-                            <button onclick="AppLogic.exportStatementToExcel('${type}', ${id}, document.getElementById('stmt-start').value, document.getElementById('stmt-end').value, document.getElementById('stmt-advanced-filter')?.value)" class="hidden md:flex items-center space-x-2 bg-emerald-500/10 text-emerald-400 px-3 py-1.5 rounded-lg text-[10px] font-semibold border border-emerald-500/20 hover:bg-emerald-500/20 transition-all">
+                        <div class="flex items-center space-x-2">
+                            <button onclick="AppLogic.exportStatementToExcel('${type}', ${id}, document.getElementById('stmt-start').value, document.getElementById('stmt-end').value, document.getElementById('stmt-advanced-filter')?.value)" class="hidden sm:flex items-center space-x-1.5 bg-emerald-500/10 text-emerald-400 px-2.5 py-1 rounded-lg text-[10px] font-semibold border border-emerald-500/20 hover:bg-emerald-500/20 transition-all">
                                 <i class="fas fa-file-excel"></i>
                                 <span>Export</span>
                             </button>
-                            <button onclick="document.getElementById('modal-container').classList.add('hidden')" class="text-slate-500 hover:text-slate-300 transition-colors">
-                                <i class="fas fa-times text-lg"></i>
+                            <button onclick="document.getElementById('modal-container').classList.add('hidden')" class="w-8 h-8 flex items-center justify-center rounded-full bg-slate-800/80 text-slate-400 hover:text-slate-200 transition-colors">
+                                <i class="fas fa-times text-sm"></i>
                             </button>
                         </div>
                     </div>
 
-                    <!-- Date Filters & Advanced -->
-                    <div class="bg-slate-950/50 p-3 rounded-2xl border border-slate-800/50 grid grid-cols-2 md:grid-cols-4 gap-3">
-                        <div class="space-y-1">
-                            <label class="text-[9px] text-slate-500 uppercase font-bold tracking-tight ml-1">From</label>
-                            <input type="date" id="stmt-start" value="${startStr}" 
-                                class="w-full bg-slate-900 border border-slate-800 rounded-lg px-2 py-1.5 text-xs text-slate-300 focus:outline-none focus:border-sky-500/50">
+                    <!-- Date Filters & Advanced Filter (Compact on Mobile) -->
+                    <div class="bg-slate-950/60 p-2.5 rounded-xl border border-slate-800/60 space-y-2 mt-2">
+                        <div class="grid grid-cols-2 gap-2">
+                            <div class="min-w-0">
+                                <label class="block text-[8px] text-slate-500 uppercase font-bold tracking-tight mb-0.5 ml-0.5">From Date</label>
+                                <input type="date" id="stmt-start" value="${startStr}" 
+                                    class="w-full min-w-0 bg-slate-900 border border-slate-800 rounded-lg px-2 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-sky-500">
+                            </div>
+                            <div class="min-w-0">
+                                <label class="block text-[8px] text-slate-500 uppercase font-bold tracking-tight mb-0.5 ml-0.5">To Date</label>
+                                <input type="date" id="stmt-end" value="${endStr}" 
+                                    class="w-full min-w-0 bg-slate-900 border border-slate-800 rounded-lg px-2 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-sky-500">
+                            </div>
                         </div>
-                        <div class="space-y-1">
-                            <label class="text-[9px] text-slate-500 uppercase font-bold tracking-tight ml-1">To</label>
-                            <input type="date" id="stmt-end" value="${endStr}" 
-                                class="w-full bg-slate-900 border border-slate-800 rounded-lg px-2 py-1.5 text-xs text-slate-300 focus:outline-none focus:border-sky-500/50">
-                        </div>
-                        <div class="space-y-1">
-                            <label class="text-[9px] text-slate-500 uppercase font-bold tracking-tight ml-1">Advanced Filter</label>
-                            <select id="stmt-advanced-filter" class="w-full bg-slate-900 border border-slate-800 rounded-lg px-2 py-1.5 text-[11px] font-bold text-slate-300 focus:outline-none focus:border-sky-500/50 max-w-full">
-                                <option value="">All Transactions</option>
-                                <optgroup label="Accounts">
-                                    ${Store.data.accounts.map(a => `<option value="acc_${a.id}" ${advancedFilterId === 'acc_'+a.id ? 'selected' : ''}>${a.name}</option>`).join('')}
-                                </optgroup>
-                                <optgroup label="Ledgers">
-                                    ${Store.data.ledgers.map(l => `<option value="led_${l.id}" ${advancedFilterId === 'led_'+l.id ? 'selected' : ''}>${l.name}</option>`).join('')}
-                                </optgroup>
-                            </select>
-                        </div>
-                        <div class="col-span-2 md:col-span-1 flex items-end">
-                            <button onclick="AppLogic.showStatement('${type}', ${id}, document.getElementById('stmt-start').value, document.getElementById('stmt-end').value, document.getElementById('stmt-advanced-filter').value)" 
-                                class="w-full bg-sky-500/10 text-sky-400 border border-sky-500/20 hover:bg-sky-500/20 py-1.5 rounded-lg text-xs font-bold transition-all uppercase tracking-wider">
-                                Filter Rows
-                            </button>
+                        <div class="grid grid-cols-3 gap-2">
+                            <div class="col-span-2 min-w-0">
+                                <select id="stmt-advanced-filter" class="w-full min-w-0 bg-slate-900 border border-slate-800 rounded-lg px-2 py-1.5 text-[11px] font-medium text-slate-300 focus:outline-none focus:border-sky-500">
+                                    <option value="">All Transactions</option>
+                                    <optgroup label="Accounts">
+                                        ${Store.data.accounts.map(a => `<option value="acc_${a.id}" ${advancedFilterId === 'acc_'+a.id ? 'selected' : ''}>${a.name}</option>`).join('')}
+                                    </optgroup>
+                                    <optgroup label="Ledgers">
+                                        ${Store.data.ledgers.map(l => `<option value="led_${l.id}" ${advancedFilterId === 'led_'+l.id ? 'selected' : ''}>${l.name}</option>`).join('')}
+                                    </optgroup>
+                                </select>
+                            </div>
+                            <div class="col-span-1 min-w-0">
+                                <button onclick="AppLogic.showStatement('${type}', ${id}, document.getElementById('stmt-start').value, document.getElementById('stmt-end').value, document.getElementById('stmt-advanced-filter').value)" 
+                                    class="w-full bg-sky-500/20 text-sky-400 border border-sky-500/30 hover:bg-sky-500/30 py-1.5 rounded-lg text-[11px] font-bold transition-all uppercase tracking-tight flex items-center justify-center space-x-1">
+                                    <i class="fas fa-filter text-[9px]"></i><span>Filter</span>
+                                </button>
+                            </div>
                         </div>
                     </div>
 
-                    <div class="flex-1 overflow-x-auto overflow-y-auto pr-1 custom-scrollbar">
-                        <table class="w-full text-left text-sm border-separate border-spacing-0">
+                    <!-- Scrollable Statement Table -->
+                    <div class="flex-1 min-h-0 overflow-y-auto overflow-x-auto rounded-xl border border-slate-800/80 bg-slate-950/40 my-2 custom-scrollbar">
+                        <table class="w-full text-left text-xs border-separate border-spacing-0">
                             <thead class="sticky top-0 bg-slate-900 text-slate-500 border-b border-slate-800 z-10">
                                 <tr>
-                                    <th class="py-3 px-2 font-bold uppercase text-[9px] tracking-widest border-b border-slate-800">Date</th>
-                                    <th class="py-3 px-2 font-bold uppercase text-[9px] tracking-widest border-b border-slate-800">Particulars</th>
-                                    <th class="py-3 px-2 font-bold uppercase text-[9px] tracking-widest text-rose-400 border-b border-slate-800">Out</th>
-                                    <th class="py-3 px-2 font-bold uppercase text-[9px] tracking-widest text-emerald-400 border-b border-slate-800">In</th>
-                                    <th class="py-3 px-2 font-bold uppercase text-[9px] tracking-widest text-sky-400 text-right border-b border-slate-800 font-orbitron">Balance</th>
+                                    <th class="py-2.5 px-2 font-bold uppercase text-[8px] sm:text-[9px] tracking-wider border-b border-slate-800">Date</th>
+                                    <th class="py-2.5 px-2 font-bold uppercase text-[8px] sm:text-[9px] tracking-wider border-b border-slate-800">Particulars</th>
+                                    <th class="py-2.5 px-2 font-bold uppercase text-[8px] sm:text-[9px] tracking-wider text-rose-400 border-b border-slate-800 text-right">Out</th>
+                                    <th class="py-2.5 px-2 font-bold uppercase text-[8px] sm:text-[9px] tracking-wider text-emerald-400 border-b border-slate-800 text-right">In</th>
+                                    <th class="py-2.5 px-2 font-bold uppercase text-[8px] sm:text-[9px] tracking-wider text-sky-400 text-right border-b border-slate-800 font-orbitron">Balance</th>
                                 </tr>
                             </thead>
                             <tbody class="divide-y divide-slate-800/30">
                                 ${statementRows.length === 0 ? `
                                     <tr>
-                                        <td colspan="5" class="py-10 text-center text-slate-600 text-[10px] uppercase tracking-widest italic">No transactions found in this period</td>
+                                        <td colspan="5" class="py-12 text-center text-slate-600 text-[10px] uppercase tracking-widest italic">No transactions found in this period</td>
                                     </tr>
                                 ` : statementRows.map(t => {
             let relatedName = '-';
@@ -1503,8 +1508,6 @@ const AppLogic = {
                     const other = Store.data.accounts.find(a => a.id == otherId) || Store.data.ledgers.find(l => l.id == otherId);
                     relatedName = other ? `Trf: ${other.name}` : 'Transfer';
                 } else if (t.type === 'passthrough') {
-                    // If viewing from-ledger (accountId), show the expense ledger name
-                    // If viewing to-ledger (ledgerId), show the from-ledger (via) name
                     if (String(t.accountId) == String(id)) {
                         const expLed = Store.data.ledgers.find(l => l.id == t.ledgerId);
                         relatedName = expLed ? `Exp: ${expLed.name}` : 'Expense';
@@ -1523,28 +1526,28 @@ const AppLogic = {
             }
 
             return `
-                                        <tr onclick="AppLogic.editTx(${t.id})" class="hover:bg-slate-800/50 transition-colors cursor-pointer group">
-                                            <td class="py-3 px-2 whitespace-nowrap text-slate-400 text-[10px] font-orbitron group-hover:text-sky-400 transition-colors">${t.date.split('-').slice(1).reverse().join('/')}</td>
-                                            <td class="py-3 px-2 max-w-[150px]">
-                                                <div class="text-[9px] text-sky-400 font-bold uppercase truncate">
+                                        <tr onclick="AppLogic.editTx(${t.id})" class="hover:bg-slate-800/60 active:bg-slate-800/80 transition-colors cursor-pointer group">
+                                            <td class="py-2.5 px-2 whitespace-nowrap text-slate-400 text-[10px] font-orbitron group-hover:text-sky-400 transition-colors">${t.date.split('-').slice(1).reverse().join('/')}</td>
+                                            <td class="py-2.5 px-2 max-w-[130px] sm:max-w-[180px]">
+                                                <div class="text-[10px] text-sky-400 font-bold uppercase truncate">
                                                     ${t.type === 'contra' ? relatedName : (relatedName || 'General')}
                                                 </div>
                                                 <div class="text-[9px] text-slate-500 truncate mt-0.5" title="${t.remark}">${t.remark || '-'}</div>
                                             </td>
-                                            <td class="py-3 px-2 text-rose-400 font-orbitron text-[11px] font-medium">${t.isOut ? t.amount.toFixed(3) : '-'}</td>
-                                            <td class="py-3 px-2 text-emerald-400 font-orbitron text-[11px] font-medium">${t.isIn ? t.amount.toFixed(3) : '-'}</td>
-                                            <td class="py-3 px-2 text-right font-orbitron text-[11px] font-bold ${t.currentBal < 0 ? 'text-rose-400' : 'text-sky-400'}">
+                                            <td class="py-2.5 px-2 text-rose-400 font-orbitron text-[11px] font-medium text-right">${t.isOut ? t.amount.toFixed(3) : '-'}</td>
+                                            <td class="py-2.5 px-2 text-emerald-400 font-orbitron text-[11px] font-medium text-right">${t.isIn ? t.amount.toFixed(3) : '-'}</td>
+                                            <td class="py-2.5 px-2 text-right font-orbitron text-[11px] font-bold ${t.currentBal < 0 ? 'text-rose-400' : 'text-sky-400'}">
                                                 ${t.currentBal < 0 ? '' : '+'}${t.currentBal.toFixed(3)}
                                             </td>
                                         </tr>
                                     `;
         }).join('')}
 
-                                <!-- Opening Balance Row (at the bottom in DESC view) -->
-                                <tr class="bg-slate-950/40">
-                                    <td class="py-3 px-2 text-slate-500 font-orbitron text-[10px]" colspan="1">${startStr.split('-').slice(1).reverse().join('/')}</td>
-                                    <td class="py-3 px-2 text-[10px] text-slate-400 font-bold uppercase tracking-tight" colspan="3">Opening Balance (B/F)</td>
-                                    <td class="py-3 px-2 text-right font-orbitron text-xs text-slate-400">
+                                <!-- Opening Balance Row -->
+                                <tr class="bg-slate-950/60">
+                                    <td class="py-2.5 px-2 text-slate-500 font-orbitron text-[10px]">${startStr.split('-').slice(1).reverse().join('/')}</td>
+                                    <td class="py-2.5 px-2 text-[10px] text-slate-400 font-bold uppercase tracking-tight" colspan="3">Opening Balance (B/F)</td>
+                                    <td class="py-2.5 px-2 text-right font-orbitron text-xs text-slate-400">
                                         ${periodOpeningBal >= 0 ? '+' : ''}${periodOpeningBal.toFixed(3)}
                                     </td>
                                 </tr>
@@ -1552,19 +1555,19 @@ const AppLogic = {
                         </table>
                     </div>
 
-                    <!-- Footer Summary -->
-                    <div class="grid grid-cols-3 gap-3 pt-3 border-t border-slate-800">
-                        <div class="bg-slate-950/30 p-2.5 rounded-xl border border-slate-800/50">
-                            <div class="text-[7px] text-slate-500 uppercase tracking-widest mb-1">Total Paid</div>
-                            <div class="text-xs font-bold font-orbitron text-rose-400">${totalOut.toFixed(3)}</div>
+                    <!-- Compact Footer Summary Bar -->
+                    <div class="grid grid-cols-3 gap-2 pt-2 border-t border-slate-800/80">
+                        <div class="bg-slate-950/50 p-2 rounded-xl border border-slate-800/60 text-center">
+                            <div class="text-[7px] text-slate-500 uppercase tracking-widest">Total Paid</div>
+                            <div class="text-xs font-bold font-orbitron text-rose-400 truncate">${totalOut.toFixed(3)}</div>
                         </div>
-                        <div class="bg-slate-950/30 p-2.5 rounded-xl border border-slate-800/50">
-                            <div class="text-[7px] text-slate-500 uppercase tracking-widest mb-1">Total Recv</div>
-                            <div class="text-xs font-bold font-orbitron text-emerald-400">${totalIn.toFixed(3)}</div>
+                        <div class="bg-slate-950/50 p-2 rounded-xl border border-slate-800/60 text-center">
+                            <div class="text-[7px] text-slate-500 uppercase tracking-widest">Total Recv</div>
+                            <div class="text-xs font-bold font-orbitron text-emerald-400 truncate">${totalIn.toFixed(3)}</div>
                         </div>
-                        <div class="bg-slate-950/30 p-2.5 rounded-xl border border-sky-500/10">
-                            <div class="text-[7px] text-sky-500/50 uppercase tracking-widest mb-1">End Balance</div>
-                            <div class="text-xs font-bold font-orbitron ${runningBal < 0 ? 'text-rose-400' : 'text-sky-400'}">
+                        <div class="bg-slate-950/50 p-2 rounded-xl border border-sky-500/20 text-center">
+                            <div class="text-[7px] text-sky-400/80 uppercase tracking-widest">End Balance</div>
+                            <div class="text-xs font-bold font-orbitron ${runningBal < 0 ? 'text-rose-400' : 'text-sky-400'} truncate">
                                 ${runningBal < 0 ? '' : '+'}${runningBal.toFixed(3)}
                             </div>
                         </div>
@@ -1703,54 +1706,56 @@ const AppLogic = {
         `).join('');
 
         const html = `
-            <div id="modal-content" class="bg-slate-900 w-full max-w-4xl rounded-t-3xl md:rounded-3xl p-6 lg:p-8 space-y-4 shadow-2xl border-t border-slate-800 transform animate-fade-in flex flex-col max-h-[90vh]">
-                <div class="flex items-center justify-between">
+            <div id="modal-content" class="bg-slate-900 w-full max-w-4xl rounded-t-3xl sm:rounded-3xl p-3.5 sm:p-6 lg:p-8 flex flex-col h-[92vh] sm:h-auto sm:max-h-[90vh] shadow-2xl border-t border-slate-800 animate-fade-in">
+                <!-- Header -->
+                <div class="flex items-center justify-between pb-2 border-b border-slate-800/80">
                     <div>
-                        <h2 class="text-xl font-bold font-orbitron text-teal-400 uppercase tracking-tighter">Net Worth History</h2>
+                        <h2 class="text-base sm:text-xl font-bold font-orbitron text-teal-400 uppercase tracking-tighter">Net Worth History</h2>
                         <p class="text-[9px] text-slate-500 uppercase tracking-widest">Growth & Position Tracking</p>
                     </div>
-                    <button onclick="window.AppLogic.showSummary()" class="bg-slate-950/50 text-slate-500 hover:text-sky-400 border border-slate-800 px-4 py-2 rounded-xl text-[10px] font-bold uppercase tracking-widest transition-all cursor-pointer">
-                        <i class="fas fa-arrow-left mr-2"></i>Back to Summary
+                    <button onclick="window.AppLogic.showSummary()" class="bg-slate-950/60 text-slate-400 hover:text-sky-400 border border-slate-800 px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-widest transition-all cursor-pointer flex items-center space-x-1.5">
+                        <i class="fas fa-arrow-left text-xs"></i><span>Summary</span>
                     </button>
                 </div>
 
-                <!-- Date Filter Bar -->
-                <div class="bg-slate-950/50 p-3 rounded-2xl border border-slate-800/50 grid grid-cols-2 md:grid-cols-3 gap-3">
-                    <div class="space-y-1">
-                        <label class="text-[9px] text-slate-500 uppercase font-bold tracking-tight ml-1">From</label>
+                <!-- Date Filter Bar (Compact on Mobile) -->
+                <div class="bg-slate-950/60 p-2.5 rounded-xl border border-slate-800/60 grid grid-cols-2 sm:grid-cols-3 gap-2 mt-2">
+                    <div class="min-w-0">
+                        <label class="block text-[8px] text-slate-500 uppercase font-bold tracking-tight mb-0.5 ml-0.5">From Date</label>
                         <input type="date" id="nw-start" value="${startStr}" 
-                            class="w-full bg-slate-900 border border-slate-800 rounded-lg px-2 py-1.5 text-xs text-slate-300 focus:outline-none focus:border-teal-500/50">
+                            class="w-full min-w-0 bg-slate-900 border border-slate-800 rounded-lg px-2 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-teal-500">
                     </div>
-                    <div class="space-y-1">
-                        <label class="text-[9px] text-slate-500 uppercase font-bold tracking-tight ml-1">To</label>
+                    <div class="min-w-0">
+                        <label class="block text-[8px] text-slate-500 uppercase font-bold tracking-tight mb-0.5 ml-0.5">To Date</label>
                         <input type="date" id="nw-end" value="${endStr}" 
-                            class="w-full bg-slate-900 border border-slate-800 rounded-lg px-2 py-1.5 text-xs text-slate-300 focus:outline-none focus:border-teal-500/50">
+                            class="w-full min-w-0 bg-slate-900 border border-slate-800 rounded-lg px-2 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-teal-500">
                     </div>
-                    <div class="col-span-2 md:col-span-1 flex items-end">
+                    <div class="col-span-2 sm:col-span-1 flex items-end min-w-0">
                         <button onclick="AppLogic.showTotalMoneyStatement(document.getElementById('nw-start').value, document.getElementById('nw-end').value)" 
-                            class="w-full bg-teal-500/10 text-teal-400 border border-teal-500/20 hover:bg-teal-500/20 py-1.5 rounded-lg text-xs font-bold transition-all uppercase tracking-wider">
-                            Apply Filter
+                            class="w-full bg-teal-500/20 text-teal-400 border border-teal-500/30 hover:bg-teal-500/30 py-1.5 rounded-lg text-[11px] font-bold transition-all uppercase tracking-tight flex items-center justify-center space-x-1">
+                            <i class="fas fa-filter text-[9px]"></i><span>Apply Filter</span>
                         </button>
                     </div>
                 </div>
 
-                <div class="flex-1 overflow-x-auto overflow-y-auto pr-2 custom-scrollbar">
-                    <table class="w-full text-left text-sm border-separate border-spacing-0">
+                <!-- Scrollable Table -->
+                <div class="flex-1 min-h-0 overflow-y-auto overflow-x-auto rounded-xl border border-slate-800/80 bg-slate-950/40 my-2 custom-scrollbar">
+                    <table class="w-full text-left text-xs border-separate border-spacing-0">
                         <thead class="sticky top-0 bg-slate-900 text-slate-500 border-b border-slate-800 z-10">
                             <tr>
-                                <th class="py-3 px-2 font-bold uppercase text-[9px] tracking-widest border-b border-slate-800">Date</th>
-                                <th class="py-3 px-2 font-bold uppercase text-[9px] tracking-widest border-b border-slate-800">Remark / Type</th>
-                                <th class="py-3 px-2 font-bold uppercase text-[9px] tracking-widest text-rose-400 border-b border-slate-800">Value Out</th>
-                                <th class="py-3 px-2 font-bold uppercase text-[9px] tracking-widest text-emerald-400 border-b border-slate-800">Value In</th>
-                                <th class="py-3 px-2 font-bold uppercase text-[9px] tracking-widest text-teal-400 text-right border-b border-slate-800">Net Position</th>
+                                <th class="py-2.5 px-2 font-bold uppercase text-[8px] sm:text-[9px] tracking-wider border-b border-slate-800">Date</th>
+                                <th class="py-2.5 px-2 font-bold uppercase text-[8px] sm:text-[9px] tracking-wider border-b border-slate-800">Remark / Type</th>
+                                <th class="py-2.5 px-2 font-bold uppercase text-[8px] sm:text-[9px] tracking-wider text-rose-400 border-b border-slate-800 text-right">Out</th>
+                                <th class="py-2.5 px-2 font-bold uppercase text-[8px] sm:text-[9px] tracking-wider text-emerald-400 border-b border-slate-800 text-right">In</th>
+                                <th class="py-2.5 px-2 font-bold uppercase text-[8px] sm:text-[9px] tracking-wider text-teal-400 text-right border-b border-slate-800 font-orbitron">Net Position</th>
                             </tr>
                         </thead>
                         <tbody class="divide-y divide-slate-800/30">
                             ${statementHtml}
-                            <tr class="bg-slate-950/30">
-                                <td class="py-3 px-2 text-[10px] text-slate-500 font-bold uppercase" colspan="2">Net Worth (B/F) at ${startStr.split('-').reverse().slice(0, 2).join('/')}</td>
-                                <td class="py-3 px-2" colspan="2"></td>
-                                <td class="py-3 px-2 text-right font-orbitron text-xs text-slate-400">
+                            <tr class="bg-slate-950/60">
+                                <td class="py-2.5 px-2 text-[10px] text-slate-500 font-bold uppercase" colspan="2">Net Worth (B/F) at ${startStr.split('-').reverse().slice(0, 2).join('/')}</td>
+                                <td class="py-2.5 px-2" colspan="2"></td>
+                                <td class="py-2.5 px-2 text-right font-orbitron text-xs text-slate-400">
                                     ${periodOpeningNetWorth.toFixed(3)}
                                 </td>
                             </tr>
@@ -1758,20 +1763,19 @@ const AppLogic = {
                     </table>
                 </div>
 
-                <div class="grid grid-cols-3 gap-4 pt-4 border-t border-slate-800">
-                    <div class="bg-slate-950 p-3 rounded-xl border border-slate-800/50">
-                        <div class="text-[8px] text-slate-500 uppercase tracking-widest mb-1">Total Net Gain</div>
-                        <div class="text-sm font-bold font-orbitron text-emerald-400">+${totalNetIn.toFixed(3)}</div>
+                <!-- Footer Summary Bar -->
+                <div class="grid grid-cols-3 gap-2 pt-2 border-t border-slate-800/80">
+                    <div class="bg-slate-950/50 p-2 rounded-xl border border-slate-800/60 text-center">
+                        <div class="text-[7px] text-slate-500 uppercase tracking-widest">Net Gain</div>
+                        <div class="text-xs font-bold font-orbitron text-emerald-400 truncate">+${totalNetIn.toFixed(3)}</div>
                     </div>
-                    <div class="bg-slate-950 p-3 rounded-xl border border-slate-800/50">
-                        <div class="text-[8px] text-slate-500 uppercase tracking-widest mb-1">Total Net Loss</div>
-                        <div class="text-sm font-bold font-orbitron text-rose-400">-${totalNetOut.toFixed(3)}</div>
+                    <div class="bg-slate-950/50 p-2 rounded-xl border border-slate-800/60 text-center">
+                        <div class="text-[7px] text-slate-500 uppercase tracking-widest">Net Loss</div>
+                        <div class="text-xs font-bold font-orbitron text-rose-400 truncate">-${totalNetOut.toFixed(3)}</div>
                     </div>
-                    <div class="bg-slate-950 p-3 rounded-xl border border-teal-500/20">
-                        <div class="text-[8px] text-teal-500/50 uppercase tracking-widest mb-1">Selected End Net</div>
-                        <div class="text-sm font-bold font-orbitron text-teal-400">
-                            ${runningNetWorth.toFixed(3)}
-                        </div>
+                    <div class="bg-slate-950/50 p-2 rounded-xl border border-teal-500/20 text-center">
+                        <div class="text-[7px] text-teal-400/80 uppercase tracking-widest">Current Position</div>
+                        <div class="text-xs font-bold font-orbitron text-teal-400 truncate">${runningNetWorth.toFixed(3)}</div>
                     </div>
                 </div>
             </div>
