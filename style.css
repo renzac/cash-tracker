@@ -216,3 +216,181 @@ main header {
     font-size: 16px !important;
     /* Force no-zoom on iOS */
 }
+
+/* ─────────────────────────────────────────────
+   MOBILE — iPhone 12 Pro Max / 14 Pro Max
+   Target: 428–430 px logical width
+   ───────────────────────────────────────────── */
+
+/* Safe area variables */
+:root {
+    --safe-top: env(safe-area-inset-top, 0px);
+    --safe-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+/* Dynamic Island / Notch clearance for the header */
+main > header {
+    padding-top: max(1rem, env(safe-area-inset-top));
+}
+
+/* Bottom nav — always safe on any iPhone */
+nav.mobile-bottom-nav {
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+    height: calc(3.5rem + env(safe-area-inset-bottom, 0px));
+}
+
+/* View container — account for dynamic bottom nav height */
+@media (max-width: 1023px) {
+    #view-container {
+        padding-bottom: calc(3.5rem + env(safe-area-inset-bottom, 16px) + 0.5rem);
+    }
+}
+
+/* ── iPhone (≤430px) fine-tuning ── */
+@media (max-width: 430px) {
+
+    /* Header: tighter horizontal padding */
+    main > header {
+        padding-left: 0.875rem;
+        padding-right: 0.875rem;
+        padding-bottom: 0.75rem;
+    }
+
+    /* Page-level padding tighter */
+    .view-content {
+        padding: 0.75rem !important;
+    }
+
+    /* Transaction form: 2-column grid on mobile */
+    #transaction-form {
+        grid-template-columns: 1fr 1fr;
+        gap: 0.625rem;
+    }
+
+    /* Full-width items inside the 2-col form */
+    #transaction-form #ledger-field,
+    #transaction-form #via-person-field,
+    #transaction-form #contra-to-field,
+    #transaction-form > div:last-of-type {
+        grid-column: span 2;
+    }
+
+    /* Remark + Save button full width */
+    #transaction-form .md\:col-span-2 {
+        grid-column: span 2;
+    }
+
+    /* Form card less padding */
+    .bg-slate-900\/50.border.rounded-3xl {
+        padding: 1rem;
+        border-radius: 1.25rem;
+    }
+
+    /* Form inputs: standard comfortable height */
+    #transaction-form input,
+    #transaction-form select {
+        padding-top: 0.625rem;
+        padding-bottom: 0.625rem;
+        border-radius: 0.75rem;
+    }
+
+    /* History search row: stack vertically */
+    #view-transactions .flex.flex-col.sm\:flex-row.sm\:items-center {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    /* History filter input row: make compact */
+    #view-transactions .flex.items-center.space-x-2 {
+        flex-wrap: wrap;
+        gap: 0.5rem;
+    }
+
+    /* Date filter: shrink */
+    #history-date-filter {
+        flex: 1;
+        min-width: 0;
+    }
+
+    /* Transaction cards: tighter padding */
+    .tx-card {
+        padding: 0.75rem;
+        border-radius: 1rem;
+    }
+
+    /* TX card icon circle smaller */
+    .tx-card .w-10 {
+        width: 2rem;
+        height: 2rem;
+        flex-shrink: 0;
+    }
+
+    /* TX card font size */
+    .tx-card .font-orbitron.font-bold {
+        font-size: 0.8rem;
+    }
+
+    /* Bottom nav: reduce icon/text to fit 7 buttons cleanly */
+    nav.lg\:hidden .mobile-nav-link {
+        padding: 0.25rem 0.125rem;
+        min-width: 0;
+        flex: 1;
+    }
+
+    nav.lg\:hidden .mobile-nav-link i {
+        font-size: 1rem;
+    }
+
+    nav.lg\:hidden .mobile-nav-link span {
+        font-size: 0.55rem;
+        letter-spacing: 0.03em;
+    }
+
+    /* Modal: full-width sheet on mobile */
+    #modal-container {
+        padding: 0;
+        align-items: flex-end;
+    }
+
+    /* Statement table: tighter columns */
+    #modal-content table {
+        font-size: 0.6875rem;
+    }
+
+    /* Ledger cards: 1 column */
+    #ledger-list,
+    #account-list,
+    #loan-list {
+        grid-template-columns: 1fr;
+        gap: 0.75rem;
+    }
+
+    /* Loans filter row: stack */
+    #view-loans .flex.flex-col.sm\:flex-row {
+        flex-direction: column;
+    }
+
+    /* Portfolio cards: stack 1 column */
+    #view-loans .grid.grid-cols-1.md\:grid-cols-2 {
+        grid-template-columns: 1fr;
+    }
+
+    /* Toast: full-width banner on mobile */
+    #toast-container {
+        left: 0.75rem;
+        right: 0.75rem;
+        transform: none;
+    }
+
+    /* Orbitron font smaller on cards to avoid overflow */
+    .font-orbitron {
+        letter-spacing: -0.01em;
+    }
+}
+
+/* ── iPhone 14 Pro Max Dynamic Island (≤430px, more top inset) ── */
+@supports (padding-top: env(safe-area-inset-top)) {
+    main > header {
+        padding-top: max(0.75rem, calc(env(safe-area-inset-top) + 0.25rem));
+    }
+}

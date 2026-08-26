@@ -128,11 +128,12 @@
 
             <!-- Top Header (Contextual) -->
             <header
-                class="flex items-center justify-between p-4 lg:p-6 bg-slate-950/50 backdrop-blur-md border-b border-slate-800 pt-safe z-50">
+                class="flex items-center justify-between px-4 pb-3 lg:px-6 lg:py-4 bg-slate-950/70 backdrop-blur-md border-b border-slate-800 z-50"
+                style="padding-top: max(0.75rem, env(safe-area-inset-top));">
                 <div class="flex items-center space-x-3">
                     <div id="connection-status" class="w-1.5 h-1.5 rounded-full bg-slate-700"
                         title="Checking connection..."></div>
-                    <span id="current-view-title" class="text-lg md:text-xl font-semibold">Transactions</span>
+                    <span id="current-view-title" class="text-base md:text-xl font-semibold">Transactions</span>
                 </div>
                 <div class="flex items-center space-x-2 md:space-x-4">
                     <button id="global-search-btn" onclick="window.AppLogic.showGlobalSearch()"
@@ -145,9 +146,12 @@
                         <span id="sync-status" class="text-[8px] text-slate-500 uppercase tracking-tighter">Checking
                             Sync...</span>
                     </div>
+                    <!-- Summary button: icon-only on mobile, text on desktop -->
                     <button id="summary-btn"
-                        class="hidden md:block bg-indigo-500/20 text-indigo-400 px-3 py-1.5 rounded-full text-xs md:text-sm font-semibold border border-indigo-500/30">
-                        Summary
+                        class="bg-indigo-500/20 text-indigo-400 rounded-full border border-indigo-500/30 transition-all active:scale-90
+                               px-2.5 py-1.5 text-xs font-semibold flex items-center space-x-1.5 md:px-3">
+                        <i class="fas fa-chart-pie text-xs"></i>
+                        <span class="hidden md:inline">Summary</span>
                     </button>
                     <button id="mobile-logout-btn"
                         class="hidden text-slate-400 hover:text-rose-500 transition-all p-3 -m-1">
@@ -157,13 +161,15 @@
             </header>
 
             <!-- Scrollable View Area -->
-            <div id="view-container" class="flex-1 overflow-y-auto pb-24 lg:pb-6">
+            <div id="view-container" class="flex-1 overflow-y-auto lg:pb-6"
+                style="padding-bottom: calc(3.5rem + env(safe-area-inset-bottom, 0px) + 0.5rem);">
+                <style>@media (min-width: 1024px) { #view-container { padding-bottom: 1.5rem !important; } }</style>
 
                 <!-- Transactions View -->
                 <div id="view-transactions" class="view-content p-4 lg:p-6 space-y-6">
                     <!-- Form Container -->
-                    <div class="bg-slate-900/50 border border-slate-800 rounded-3xl p-6 shadow-xl">
-                        <form id="transaction-form" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                    <div class="bg-slate-900/50 border border-slate-800 rounded-3xl p-4 lg:p-6 shadow-xl">
+                        <form id="transaction-form" class="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-4 gap-3 lg:gap-4">
                             <div class="space-y-1">
                                 <label class="text-xs text-slate-500 ml-1">Date</label>
                                 <input type="date" id="tx-date"
@@ -179,28 +185,28 @@
                                     <option value="passthrough" class="text-violet-400">Pass-Through</option>
                                 </select>
                             </div>
-                            <div id="ledger-field" class="space-y-1">
+                            <div id="ledger-field" class="col-span-2 lg:col-span-1 space-y-1">
                                 <label id="tx-ledger-label" class="text-xs text-slate-500 ml-1">Ledger</label>
                                 <select id="tx-ledger"
                                     class="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 focus:outline-none focus:ring-1 focus:ring-sky-500 mono-select">
                                     <option value="">Select Ledger</option>
                                 </select>
                             </div>
-                            <div id="account-field" class="space-y-1">
+                            <div id="account-field" class="col-span-2 lg:col-span-1 space-y-1">
                                 <label id="tx-account-label" class="text-xs text-slate-500 ml-1">Account</label>
                                 <select id="tx-account"
                                     class="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 focus:outline-none focus:ring-1 focus:ring-sky-500 mono-select">
                                     <option value="">Select Account</option>
                                 </select>
                             </div>
-                            <div id="contra-to-field" class="hidden space-y-1">
+                            <div id="contra-to-field" class="hidden col-span-2 lg:col-span-1 space-y-1">
                                 <label class="text-xs text-slate-500 ml-1">To Account/Ledger</label>
                                 <select id="tx-to"
                                     class="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 focus:outline-none focus:ring-1 focus:ring-sky-500 mono-select">
                                     <option value="">Select Target</option>
                                 </select>
                             </div>
-                            <div id="via-person-field" class="hidden space-y-1">
+                            <div id="via-person-field" class="hidden col-span-2 lg:col-span-1 space-y-1">
                                 <label class="text-xs text-slate-500 ml-1">Via Person (Agent)</label>
                                 <select id="tx-via"
                                     class="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 focus:outline-none focus:ring-1 focus:ring-sky-500 mono-select">
@@ -212,7 +218,7 @@
                                 <input type="number" step="0.001" id="tx-amount" placeholder="0.000"
                                     class="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 focus:outline-none focus:ring-1 focus:ring-sky-500 font-orbitron text-lg">
                             </div>
-                            <div class="md:col-span-2 lg:col-span-2 space-y-1">
+                            <div class="col-span-2 lg:col-span-2 space-y-1">
                                 <label class="text-xs text-slate-500 ml-1">Remark</label>
                                 <input type="text" id="tx-remark" placeholder="Note..."
                                     class="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 focus:outline-none focus:ring-1 focus:ring-sky-500">
@@ -463,37 +469,38 @@
 
             <!-- Bottom Nav (Mobile) -->
             <nav
-                class="lg:hidden fixed bottom-0 left-0 right-0 bg-slate-950/80 backdrop-blur-xl border-t border-slate-800 flex justify-around items-center h-20 px-1 pb-safe z-[2000]">
-                <button data-view="transactions" class="mobile-nav-link active flex flex-col items-center space-y-1">
+                class="mobile-bottom-nav lg:hidden fixed bottom-0 left-0 right-0 bg-slate-950/90 backdrop-blur-xl border-t border-slate-800 flex justify-around items-center px-1 z-[2000]"
+                style="padding-bottom: env(safe-area-inset-bottom, 0px); height: calc(3.5rem + env(safe-area-inset-bottom, 0px));">
+                <button data-view="transactions" class="mobile-nav-link active flex flex-col items-center justify-center space-y-0.5 flex-1 py-2">
                     <i class="fas fa-exchange-alt text-lg"></i>
                     <span class="text-[9px] font-medium uppercase tracking-wider">Entries</span>
                 </button>
                 <button onclick="window.AppLogic.showGlobalSearch()"
-                    class="mobile-nav-link flex flex-col items-center space-y-1 text-slate-500">
+                    class="mobile-nav-link flex flex-col items-center justify-center space-y-0.5 text-slate-500 flex-1 py-2">
                     <i class="fas fa-search text-lg"></i>
                     <span class="text-[9px] font-medium uppercase tracking-wider">Search</span>
                 </button>
-                <button data-view="ledgers" class="mobile-nav-link flex flex-col items-center space-y-1 text-slate-500">
+                <button data-view="ledgers" class="mobile-nav-link flex flex-col items-center justify-center space-y-0.5 text-slate-500 flex-1 py-2">
                     <i class="fas fa-list-ul text-lg"></i>
                     <span class="text-[9px] font-medium uppercase tracking-wider">Ledger</span>
                 </button>
                 <button data-view="accounts"
-                    class="mobile-nav-link flex flex-col items-center space-y-1 text-slate-500">
+                    class="mobile-nav-link flex flex-col items-center justify-center space-y-0.5 text-slate-500 flex-1 py-2">
                     <i class="fas fa-university text-lg"></i>
                     <span class="text-[9px] font-medium uppercase tracking-wider">Banks</span>
                 </button>
                 <button data-view="loans"
-                    class="mobile-nav-link flex flex-col items-center space-y-1 text-slate-500">
+                    class="mobile-nav-link flex flex-col items-center justify-center space-y-0.5 text-slate-500 flex-1 py-2">
                     <i class="fas fa-briefcase text-lg"></i>
                     <span class="text-[9px] font-medium uppercase tracking-wider">Loans</span>
                 </button>
                 <button id="mobile-summary-btn"
-                    class="mobile-nav-link flex flex-col items-center space-y-1 text-slate-500">
+                    class="mobile-nav-link flex flex-col items-center justify-center space-y-0.5 text-slate-500 flex-1 py-2">
                     <i class="fas fa-chart-pie text-lg"></i>
                     <span class="text-[9px] font-medium uppercase tracking-wider">Summary</span>
                 </button>
                 <button id="mobile-logout-nav"
-                    class="mobile-nav-link flex flex-col items-center space-y-1 text-slate-500">
+                    class="mobile-nav-link flex flex-col items-center justify-center space-y-0.5 text-slate-500 flex-1 py-2">
                     <i class="fas fa-sign-out-alt text-lg"></i>
                     <span class="text-[9px] font-medium uppercase tracking-wider">Logout</span>
                 </button>
