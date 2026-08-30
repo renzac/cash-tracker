@@ -124,9 +124,30 @@ const Store = {
         if (!this.data.loans) this.data.loans = [];
         if (!this.data.loanPayments) this.data.loanPayments = [];
 
-        // If we migrated or seeded and sync isn't blocked, save to cloud
+        // Authoritative balance recalculation on startup
         if (!this.syncBlocked) {
-            await this.save();
+            await this.recalculateBalances();
+        } else {
+            this.data.accounts.forEach(a => {
+                a.openingBalance = this.round3(a.openingBalance || 0);
+                let bal = a.openingBalance;
+                this.data.transactions.forEach(tx => {
+                    bal += this.getTransactionEffect(tx, 'account', a.id);
+                });
+                a.balance = this.round3(bal);
+            });
+            this.data.ledgers.forEach(l => {
+                l.openingBalance = this.round3(l.openingBalance || 0);
+                if (l.groupId > 2) {
+                    let bal = l.openingBalance;
+                    this.data.transactions.forEach(tx => {
+                        bal += this.getTransactionEffect(tx, 'ledger', l.id);
+                    });
+                    l.balance = this.round3(bal);
+                } else {
+                    l.balance = 0;
+                }
+            });
         }
     },
 
@@ -287,141 +308,141 @@ const Store = {
         }
     },
 
-    async recalculateBalances() {
-        this.data.accounts.forEach(a => { a.balance = a.openingBalance || 0; });
-        this.data.ledgers.forEach(l => {
-            if (l.groupId > 2) l.balance = l.openingBalance || 0;
-        });
+    round3(val) {
+        return Math.round((parseFloat(val) || 0) * 1000) / 1000;
+    },
 
-        const sortedTxs = [...this.data.transactions].sort((a, b) => {
-            if (a.date !== b.date) return a.date.localeCompare(b.date);
-            return a.id - b.id;
-        });
-        sortedTxs.forEach(tx => {
-            const acc = this.data.accounts.find(a => a.id == tx.accountId);
-            const led = this.data.ledgers.find(l => l.id == tx.ledgerId);
+    resolveEntityType(id, explicitType) {
+        if (explicitType === 'account' || explicitType === 'ledger') return explicitType;
+        const strId = String(id);
+        const isAcc = this.data.accounts.some(a => String(a.id) === strId);
+        const isLed = this.data.ledgers.some(l => String(l.id) === strId);
+        if (isAcc && !isLed) return 'account';
+        if (isLed && !isAcc) return 'ledger';
+        // Disambiguate overlapping IDs (1-4): Standard expense ledgers (groupId <= 2)
+        // never participate in contras or have rolling balances, so if groupId <= 2, it's an account.
+        if (isLed) {
+            const led = this.data.ledgers.find(l => String(l.id) === strId);
+            if (led && led.groupId <= 2) return 'account';
+        }
+        return isAcc ? 'account' : 'ledger';
+    },
+
+    isPayableLedger(l) {
+        if (!l) return false;
+        if (l.groupId === 5) return true;
+        const group = this.data.ledgerGroups ? this.data.ledgerGroups.find(g => g.id == l.groupId) : null;
+        return group ? group.name.toLowerCase().includes('payable') : false;
+    },
+
+    getTransactionEffect(tx, entityType, entityId) {
+        const amount = parseFloat(tx.amount) || 0;
+        if (amount === 0) return 0;
+
+        const targetId = String(entityId);
+        const tFromId = String(tx.accountId);
+        const tToId = String(tx.toId);
+        const tLedId = String(tx.ledgerId);
+
+        if (entityType === 'account') {
+            if (tx.type === 'expense') {
+                if (tFromId === targetId) return -amount;
+            } else if (tx.type === 'income') {
+                if (tFromId === targetId) return +amount;
+            } else if (tx.type === 'contra') {
+                const fromType = tx.fromType || this.resolveEntityType(tx.accountId);
+                const toType = tx.toType || this.resolveEntityType(tx.toId);
+                if (tFromId === targetId && fromType === 'account') return -amount;
+                if (tToId === targetId && toType === 'account') return +amount;
+            } else if (tx.type === 'passthrough') {
+                const fromType = tx.fromType || this.resolveEntityType(tx.accountId);
+                if (tFromId === targetId && fromType === 'account') return -amount;
+            }
+            return 0;
+        }
+
+        if (entityType === 'ledger') {
+            const led = this.data.ledgers.find(l => String(l.id) === targetId);
+            if (!led || led.groupId <= 2) return 0; // Standard non-rolling categories have no balance
 
             if (tx.type === 'expense') {
-                if (acc) acc.balance -= tx.amount;
-                if (led && led.groupId > 2) led.balance += tx.amount;
+                if (tLedId === targetId) return +amount; // Outflow from cash is Inflow/Receivable to debt
             } else if (tx.type === 'income') {
-                if (acc) acc.balance += tx.amount;
-                if (led && led.groupId > 2) led.balance -= tx.amount;
+                if (tLedId === targetId) return -amount; // Inflow to cash is debt settlement/reduction
             } else if (tx.type === 'contra') {
-                const fromType = tx.fromType || (this.data.accounts.some(a => a.id == tx.accountId) ? 'account' : 'ledger');
-                const toType = tx.toType || (this.data.accounts.some(a => a.id == tx.toId) ? 'account' : 'ledger');
+                const fromType = tx.fromType || this.resolveEntityType(tx.accountId);
+                const toType = tx.toType || this.resolveEntityType(tx.toId);
 
-                const from = fromType === 'account' ? this.data.accounts.find(a => a.id == tx.accountId) : this.data.ledgers.find(l => l.id == tx.accountId);
-                const to = toType === 'account' ? this.data.accounts.find(a => a.id == tx.toId) : this.data.ledgers.find(l => l.id == tx.toId);
-
-                if (from && to) {
-                    if (fromType === 'ledger' && toType === 'ledger') {
-                        // Ledger-to-Ledger Contra: source gains balance, destination loses
-                        from.balance += tx.amount;
-                        to.balance -= tx.amount;
-                    } else {
-                        // Regular Account/Ledger Transfer
-                        if (fromType === 'account' || (from.groupId && from.groupId > 2)) from.balance -= tx.amount;
-                        if (toType === 'account' || (to.groupId && to.groupId > 2)) to.balance += tx.amount;
-                    }
+                if (fromType === 'ledger' && toType === 'ledger') {
+                    // Ledger-to-Ledger Contra: source gains balance (debt transferred out), destination loses
+                    if (tFromId === targetId) return +amount;
+                    if (tToId === targetId) return -amount;
+                } else {
+                    if (tFromId === targetId && fromType === 'ledger') return -amount; // Ledger paid to account
+                    if (tToId === targetId && toType === 'ledger') return +amount; // Account paid into ledger
                 }
             } else if (tx.type === 'passthrough') {
-                // Pass-Through: Intermediary (from) pays on behalf of Expense Ledger (to)
-                const fromType = tx.fromType || (this.data.accounts.some(a => a.id == tx.accountId) ? 'account' : 'ledger');
-                const from = fromType === 'account' ? this.data.accounts.find(a => a.id == tx.accountId) : this.data.ledgers.find(l => l.id == tx.accountId);
-                const to = this.data.ledgers.find(l => l.id == tx.ledgerId);
+                const fromType = tx.fromType || this.resolveEntityType(tx.accountId);
+                // In pass-through: Paid Via ledger decreases, Expense Ledger decreases
+                if (tFromId === targetId && fromType === 'ledger') return -amount;
+                if (tLedId === targetId) return -amount;
+            }
+            return 0;
+        }
 
-                if (from) {
-                    if (fromType === 'account' || (from.groupId && from.groupId > 2)) from.balance -= tx.amount;
-                }
-                if (to && to.groupId > 2) {
-                    to.balance -= tx.amount;
-                }
+        return 0;
+    },
+
+    async recalculateBalances() {
+        this.data.accounts.forEach(a => {
+            a.openingBalance = this.round3(a.openingBalance || 0);
+            let bal = a.openingBalance;
+            this.data.transactions.forEach(tx => {
+                bal += this.getTransactionEffect(tx, 'account', a.id);
+            });
+            a.balance = this.round3(bal);
+        });
+
+        this.data.ledgers.forEach(l => {
+            l.openingBalance = this.round3(l.openingBalance || 0);
+            if (l.groupId > 2) {
+                let bal = l.openingBalance;
+                this.data.transactions.forEach(tx => {
+                    bal += this.getTransactionEffect(tx, 'ledger', l.id);
+                });
+                l.balance = this.round3(bal);
+            } else {
+                l.balance = 0;
             }
         });
+
         await this.save();
     },
 
     _applyBalance(tx) {
-        if (tx.type === 'expense') {
-            const acc = this.data.accounts.find(a => a.id == tx.accountId);
-            if (acc) acc.balance -= tx.amount;
-            const led = this.data.ledgers.find(l => l.id == tx.ledgerId);
-            if (led && led.groupId > 2) led.balance += tx.amount;
-        } else if (tx.type === 'income') {
-            const acc = this.data.accounts.find(a => a.id == tx.accountId);
-            if (acc) acc.balance += tx.amount;
-            const led = this.data.ledgers.find(l => l.id == tx.ledgerId);
-            if (led && led.groupId > 2) led.balance -= tx.amount;
-        } else if (tx.type === 'contra') {
-            const fromType = tx.fromType || (this.data.accounts.some(a => a.id == tx.accountId) ? 'account' : 'ledger');
-            const toType = tx.toType || (this.data.accounts.some(a => a.id == tx.toId) ? 'account' : 'ledger');
-
-            const from = fromType === 'account' ? this.data.accounts.find(a => a.id == tx.accountId) : this.data.ledgers.find(l => l.id == tx.accountId);
-            const to = toType === 'account' ? this.data.accounts.find(a => a.id == tx.toId) : this.data.ledgers.find(l => l.id == tx.toId);
-
-            if (from && to) {
-                if (fromType === 'ledger' && toType === 'ledger') {
-                    from.balance += tx.amount;
-                    to.balance -= tx.amount;
-                } else {
-                    if (fromType === 'account' || (from.groupId && from.groupId > 2)) from.balance -= tx.amount;
-                    if (toType === 'account' || (to.groupId && to.groupId > 2)) to.balance += tx.amount;
-                }
+        this.data.accounts.forEach(a => {
+            const effect = this.getTransactionEffect(tx, 'account', a.id);
+            if (effect !== 0) a.balance = this.round3(a.balance + effect);
+        });
+        this.data.ledgers.forEach(l => {
+            if (l.groupId > 2) {
+                const effect = this.getTransactionEffect(tx, 'ledger', l.id);
+                if (effect !== 0) l.balance = this.round3(l.balance + effect);
             }
-        } else if (tx.type === 'passthrough') {
-            const fromType = tx.fromType || (this.data.accounts.some(a => a.id == tx.accountId) ? 'account' : 'ledger');
-            const from = fromType === 'account' ? this.data.accounts.find(a => a.id == tx.accountId) : this.data.ledgers.find(l => l.id == tx.accountId);
-            const to = this.data.ledgers.find(l => l.id == tx.ledgerId);
-
-            if (from) {
-                if (fromType === 'account' || (from.groupId && from.groupId > 2)) from.balance -= tx.amount;
-            }
-            if (to && to.groupId > 2) {
-                to.balance -= tx.amount;
-            }
-        }
+        });
     },
 
     _reverseBalance(tx) {
-        if (tx.type === 'expense') {
-            const acc = this.data.accounts.find(a => a.id == tx.accountId);
-            if (acc) acc.balance += tx.amount;
-            const led = this.data.ledgers.find(l => l.id == tx.ledgerId);
-            if (led && led.groupId > 2) led.balance += tx.amount;
-        } else if (tx.type === 'income') {
-            const acc = this.data.accounts.find(a => a.id == tx.accountId);
-            if (acc) acc.balance += tx.amount;
-            const led = this.data.ledgers.find(l => l.id == tx.ledgerId);
-            if (led && led.groupId > 2) led.balance -= tx.amount;
-        } else if (tx.type === 'contra') {
-            const fromType = tx.fromType || (this.data.accounts.some(a => a.id == tx.accountId) ? 'account' : 'ledger');
-            const toType = tx.toType || (this.data.accounts.some(a => a.id == tx.toId) ? 'account' : 'ledger');
-
-            const from = fromType === 'account' ? this.data.accounts.find(a => a.id == tx.accountId) : this.data.ledgers.find(l => l.id == tx.accountId);
-            const to = toType === 'account' ? this.data.accounts.find(a => a.id == tx.toId) : this.data.ledgers.find(l => l.id == tx.toId);
-
-            if (from && to) {
-                if (fromType === 'ledger' && toType === 'ledger') {
-                    from.balance -= tx.amount;
-                    to.balance += tx.amount;
-                } else {
-                    if (fromType === 'account' || (from.groupId && from.groupId > 2)) from.balance += tx.amount;
-                    if (toType === 'account' || (to.groupId && to.groupId > 2)) to.balance -= tx.amount;
-                }
+        this.data.accounts.forEach(a => {
+            const effect = this.getTransactionEffect(tx, 'account', a.id);
+            if (effect !== 0) a.balance = this.round3(a.balance - effect);
+        });
+        this.data.ledgers.forEach(l => {
+            if (l.groupId > 2) {
+                const effect = this.getTransactionEffect(tx, 'ledger', l.id);
+                if (effect !== 0) l.balance = this.round3(l.balance - effect);
             }
-        } else if (tx.type === 'passthrough') {
-            const fromType = tx.fromType || (this.data.accounts.some(a => a.id == tx.accountId) ? 'account' : 'ledger');
-            const from = fromType === 'account' ? this.data.accounts.find(a => a.id == tx.accountId) : this.data.ledgers.find(l => l.id == tx.accountId);
-            const to = this.data.ledgers.find(l => l.id == tx.ledgerId);
-
-            if (from) {
-                if (fromType === 'account' || (from.groupId && from.groupId > 2)) from.balance += tx.amount;
-            }
-            if (to && to.groupId > 2) {
-                to.balance += tx.amount;
-            }
-        }
+        });
     },
 
     async addLedgerGroup(name) {

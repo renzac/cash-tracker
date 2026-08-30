@@ -470,7 +470,7 @@ const AppLogic = {
         };
 
         const getLedgerInfo = l => {
-            const isPayable = l.groupId === 5;
+            const isPayable = Store.isPayableLedger(l);
             const isNeg = l.balance < 0;
             const effectiveOwe = isPayable ? !isNeg : isNeg;
             const typeLabel = effectiveOwe ? 'Pay' : 'Recv';
@@ -847,7 +847,7 @@ const AppLogic = {
         list.innerHTML = Store.data.ledgers.map(l => {
             const groupName = Store.data.ledgerGroups.find(g => g.id == l.groupId)?.name || 'Unknown';
             const isRolling = l.groupId > 2;
-            const isPayable = l.groupId === 5;
+            const isPayable = Store.isPayableLedger(l);
             const label = l.balance < 0
                 ? (isPayable ? 'He Owes Me' : 'I Owe Him')
                 : (isPayable ? 'I Owe' : 'He Owes Me');
@@ -1173,11 +1173,17 @@ const AppLogic = {
         const accounts = Store.data.accounts.filter(a => Math.abs(a.balance) > 0.0001);
         const rollingLedgers = Store.data.ledgers.filter(l => l.groupId > 2 && Math.abs(l.balance) > 0.0001);
 
-        const totalAccounts = Store.data.accounts.reduce((sum, a) => sum + a.balance, 0);
-        const totalReceivables = rollingLedgers.filter(l => (l.groupId !== 5 && l.balance > 0) || (l.groupId === 5 && l.balance < 0))
-            .reduce((sum, l) => sum + Math.abs(l.balance), 0);
-        const totalPayables = rollingLedgers.filter(l => (l.groupId !== 5 && l.balance < 0) || (l.groupId === 5 && l.balance > 0))
-            .reduce((sum, l) => sum + Math.abs(l.balance), 0);
+        const totalAccounts = Store.data.accounts.reduce((sum, a) => sum + (a.balance || 0), 0);
+        const totalReceivables = rollingLedgers.filter(l => {
+            const isPayable = Store.isPayableLedger(l);
+            return isPayable ? l.balance < 0 : l.balance > 0;
+        }).reduce((sum, l) => sum + Math.abs(l.balance), 0);
+
+        const totalPayables = rollingLedgers.filter(l => {
+            const isPayable = Store.isPayableLedger(l);
+            return isPayable ? l.balance > 0 : l.balance < 0;
+        }).reduce((sum, l) => sum + Math.abs(l.balance), 0);
+
         const myMoney = totalAccounts + totalReceivables - totalPayables;
 
         let html = `
@@ -1232,13 +1238,13 @@ const AppLogic = {
                         </h4>
                         <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
                             ${rollingLedgers.map(l => {
-            const isPayable = l.groupId === 5;
+            const isPayable = Store.isPayableLedger(l);
             const isNeg = l.balance < 0;
             const effectiveOwe = isPayable ? !isNeg : isNeg;
             return `
                                     <div class="bg-slate-900 border border-slate-800/50 p-4 rounded-2xl flex justify-between items-center group hover:border-sky-500/30 transition-all cursor-pointer" onclick="AppLogic.showStatement('ledger', ${l.id})">
                                         <div>
-                                            <div class="text-slate-300 font-medium text-sm">${l.name}</div>
+                                             <div class="text-slate-300 font-medium text-sm">${l.name}</div>
                                             <div class="text-[9px] uppercase tracking-widest ${effectiveOwe ? 'text-rose-400' : 'text-emerald-400'}">
                                                 ${effectiveOwe ? (isPayable ? 'Tithe/Payable' : 'I Owe Him') : (isPayable ? 'Overpaid' : 'He Owes Me')}
                                             </div>
@@ -1262,151 +1268,136 @@ const AppLogic = {
         this.modalContainer.classList.remove('hidden');
     },
 
+    getOtherParty(t, type, id) {
+        const targetId = String(id);
+        const tFromId = String(t.accountId);
+        const tToId = String(t.toId);
+        const tLedId = String(t.ledgerId);
+
+        if (type === 'account') {
+            if (t.type === 'contra') {
+                const fromType = t.fromType || Store.resolveEntityType(t.accountId);
+                const toType = t.toType || Store.resolveEntityType(t.toId);
+                if (tFromId === targetId) return { type: toType, id: t.toId };
+                if (tToId === targetId) return { type: fromType, id: t.accountId };
+            } else if (t.type === 'passthrough') {
+                return { type: 'ledger', id: t.ledgerId };
+            } else {
+                return { type: 'ledger', id: t.ledgerId };
+            }
+        } else {
+            // Ledger
+            if (t.type === 'contra') {
+                const fromType = t.fromType || Store.resolveEntityType(t.accountId);
+                const toType = t.toType || Store.resolveEntityType(t.toId);
+                if (tFromId === targetId) return { type: toType, id: t.toId };
+                if (tToId === targetId) return { type: fromType, id: t.accountId };
+            } else if (t.type === 'passthrough') {
+                if (tFromId === targetId) return { type: 'ledger', id: t.ledgerId };
+                const fromType = t.fromType || Store.resolveEntityType(t.accountId);
+                return { type: fromType, id: t.accountId };
+            } else {
+                return { type: 'account', id: t.accountId };
+            }
+        }
+        return null;
+    },
+
+    getRelatedName(t, type, id) {
+        const other = this.getOtherParty(t, type, id);
+        if (!other) return '-';
+
+        let name = '';
+        if (other.type === 'account') {
+            const acc = Store.data.accounts.find(a => String(a.id) === String(other.id));
+            name = acc ? acc.name : 'Account';
+        } else {
+            const led = Store.data.ledgers.find(l => String(l.id) === String(other.id));
+            name = led ? led.name : 'Ledger';
+        }
+
+        if (t.type === 'contra') {
+            return `Trf: ${name}`;
+        }
+        if (t.type === 'passthrough') {
+            if (type === 'ledger' && String(t.accountId) === String(id)) {
+                return `Exp: ${name}`;
+            } else if (type === 'ledger') {
+                return `Via: ${name}`;
+            }
+            return `Pass: ${name}`;
+        }
+        return name;
+    },
+
     showStatement(type, id, startStr, endStr, advancedFilterId) {
         const item = Store.data[type + 's'].find(i => i.id == id);
+        if (!item) return;
 
-        // Default to current month if dates not provided
-        const now = new Date();
-        if (!startStr) {
-            const firstDay = new Date(now.getFullYear(), now.getMonth(), 1);
-            startStr = firstDay.toISOString().split('T')[0];
-        }
-        if (!endStr) {
-            endStr = now.toISOString().split('T')[0];
-        }
+        const startDate = startStr || '';
+        const endDate = endStr || '';
 
-        // Get ALL relevant transactions for this item, sorted by ID (timestamp)
-        // --- 0. Precise Transaction Filtering ---
-        const allRelevantTxs = Store.data.transactions.filter(t => {
-            const targetId = String(id);
-            const tFromId = String(t.accountId);
-            const tToId = String(t.toId);
-            const tLedId = String(t.ledgerId);
-
-            let isRelevant = false;
-            if (type === 'account') {
-                if (t.type === 'contra') {
-                    const fromIsAcc = Store.data.accounts.some(a => String(a.id) === tFromId);
-                    const toIsAcc = Store.data.accounts.some(a => String(a.id) === tToId);
-                    isRelevant = (tFromId === targetId && fromIsAcc) || (tToId === targetId && toIsAcc);
-                } else if (t.type === 'passthrough') {
-                    // accountId can be a bank account or ledger
-                    const fromExists = Store.data.accounts.some(a => String(a.id) === tFromId) || Store.data.ledgers.some(l => String(l.id) === tFromId);
-                    isRelevant = (tFromId === targetId && fromExists);
-                } else {
-                    isRelevant = tFromId === targetId;
-                }
-            } else {
-                if (t.type === 'contra' || t.type === 'passthrough') {
-                    const from = Store.data.ledgers.find(l => String(l.id) === tFromId);
-                    const to = t.type === 'contra' ? Store.data.ledgers.find(l => String(l.id) === tToId) : Store.data.ledgers.find(l => String(l.id) === tLedId);
-                    isRelevant = (tFromId === targetId && from) || ((t.type === 'contra' ? tToId : tLedId) === targetId && to);
-                } else {
-                    isRelevant = tLedId === targetId;
-                }
-            }
-            if (!isRelevant) return false;
-
-            if (advancedFilterId) {
-                const isFilterAcc = advancedFilterId.startsWith('acc_');
-                const filterId = advancedFilterId.split('_')[1];
-                if (isFilterAcc) {
-                    if (t.type === 'contra' || t.type === 'passthrough') {
-                        const fromAcc = Store.data.accounts.find(a => String(a.id) === tFromId);
-                        const toAcc = t.type === 'contra' ? Store.data.accounts.find(a => String(a.id) === tToId) : null;
-                        return (tFromId === filterId && fromAcc) || (tToId === filterId && toAcc);
-                    } else {
-                        return tFromId === filterId;
-                    }
-                } else {
-                    if (t.type === 'contra' || t.type === 'passthrough') {
-                        const fromLed = Store.data.ledgers.find(l => String(l.id) === tFromId);
-                        const toLed = t.type === 'contra' ? Store.data.ledgers.find(l => String(l.id) === tToId) : Store.data.ledgers.find(l => String(l.id) === tLedId);
-                        return (tFromId === filterId && fromLed) || ((t.type === 'contra' ? tToId : tLedId) === filterId && toLed);
-                    } else {
-                        return tLedId === filterId;
-                    }
-                }
-            }
-            return true;
-        }).sort((a, b) => {
+        // Sort ALL transactions chronologically
+        const sortedTxs = [...Store.data.transactions].sort((a, b) => {
             if (a.date !== b.date) return a.date.localeCompare(b.date);
             return a.id - b.id;
         });
 
-        // Helper: Determine if transaction is IN or OUT for the current view
-        const getSide = (t) => {
-            let isIn = false, isOut = false;
-            const targetId = String(id);
-            const tFromId = String(t.accountId);
-            const tToId = String(t.toId);
-            const tLedId = String(t.ledgerId);
-
-            if (type === 'account') {
-                if (t.type === 'expense') isOut = (tFromId === targetId);
-                else if (t.type === 'income') isIn = (tFromId === targetId);
-                else if (t.type === 'contra') {
-                    if (tFromId === targetId) isOut = true;
-                    if (tToId === targetId) isIn = true;
-                } else if (t.type === 'passthrough') {
-                    isOut = (tFromId === targetId); // cash leaves the paid-from account
-                }
-            } else {
-                // Ledger Statement
-                if (t.type === 'expense') isOut = (tLedId === targetId);
-                else if (t.type === 'income') isIn = (tLedId === targetId);
-                else if (t.type === 'contra') {
-                    const fromType = t.fromType || (Store.data.accounts.some(a => a.id == t.accountId) ? 'account' : 'ledger');
-                    const toType = t.toType || (Store.data.accounts.some(a => a.id == t.toId) ? 'account' : 'ledger');
-                    const isL2L = (fromType === 'ledger' && toType === 'ledger');
-
-                    if (isL2L) {
-                        // Ledger-to-Ledger contra: source gains balance (Out from debt perspective), destination loses
-                        if (tFromId === targetId) isOut = true;
-                        if (tToId === targetId) isIn = true;
-                    } else {
-                        if (tFromId === targetId) isIn = true;
-                        if (tToId === targetId) isOut = true;
+        // 1. Calculate Opening Balance before startDate
+        let periodOpeningBal = Store.round3(item.openingBalance || 0);
+        if (startDate) {
+            sortedTxs.forEach(t => {
+                if (t.date < startDate) {
+                    const effect = Store.getTransactionEffect(t, type, id);
+                    if (effect !== 0) {
+                        periodOpeningBal = Store.round3(periodOpeningBal + effect);
                     }
-                } else if (t.type === 'passthrough') {
-                    // Pass-through: BOTH ledgers decrease in balance
-                    // Source ledger (accountId): balance decreases → Out
-                    // Dest ledger (ledgerId): balance decreases → Out
-                    if (tFromId === targetId) isOut = true;
-                    if (tLedId === targetId) isOut = true;
                 }
-            }
-            return { isIn, isOut };
-        };
+            });
+        }
 
-        // 1. Calculate Opening Balance (Everything before startStr)
-        let periodOpeningBal = item.openingBalance || 0;
-        allRelevantTxs.filter(t => t.date < startStr).forEach(t => {
-            const { isIn, isOut } = getSide(t);
-            if (isIn) periodOpeningBal += (type === 'ledger' && item.groupId > 2) ? -t.amount : t.amount;
-            if (isOut) periodOpeningBal += (type === 'ledger' && item.groupId > 2) ? t.amount : -t.amount;
-        });
-
-        // 2. Map and Map Current Period Transactions
-        const periodTxs = allRelevantTxs.filter(t => t.date >= startStr && t.date <= endStr);
+        // 2. Process transactions within date range
         let runningBal = periodOpeningBal;
         let totalIn = 0;
         let totalOut = 0;
+        const statementRows = [];
 
-        const statementRows = periodTxs.map(t => {
-            const { isIn, isOut } = getSide(t);
-            if (isIn) {
-                totalIn += t.amount;
-                runningBal += (type === 'ledger' && item.groupId > 2) ? -t.amount : t.amount;
+        sortedTxs.forEach(t => {
+            if (startDate && t.date < startDate) return;
+            if (endDate && t.date > endDate) return;
+
+            const effect = Store.getTransactionEffect(t, type, id);
+            if (effect === 0) return;
+
+            if (advancedFilterId) {
+                const isFilterAcc = advancedFilterId.startsWith('acc_');
+                const filterId = advancedFilterId.split('_')[1];
+                const other = this.getOtherParty(t, type, id);
+                if (!other || other.type !== (isFilterAcc ? 'account' : 'ledger') || String(other.id) !== filterId) {
+                    return;
+                }
             }
-            if (isOut) {
-                totalOut += t.amount;
-                runningBal += (type === 'ledger' && item.groupId > 2) ? t.amount : -t.amount;
-            }
-            return { ...t, isIn, isOut, currentBal: runningBal };
+
+            const isIn = effect > 0;
+            const isOut = effect < 0;
+            const amount = Math.abs(effect);
+
+            if (isIn) totalIn = Store.round3(totalIn + amount);
+            if (isOut) totalOut = Store.round3(totalOut + amount);
+
+            runningBal = Store.round3(runningBal + effect);
+
+            statementRows.push({
+                ...t,
+                effect,
+                isIn,
+                isOut,
+                amount,
+                currentBal: runningBal
+            });
         });
 
-        // 3. APPLY STRICT DESC SORT FOR DISPLAY (Newest Date -> Newest ID)
+        // 3. Display Sort: Descending (newest date -> newest id first)
         statementRows.sort((a, b) => {
             if (b.date !== a.date) return b.date.localeCompare(a.date);
             return b.id - a.id;
@@ -1440,12 +1431,12 @@ const AppLogic = {
                         <div class="grid grid-cols-2 gap-2">
                             <div class="min-w-0">
                                 <label class="block text-[8px] text-slate-500 uppercase font-bold tracking-tight mb-0.5 ml-0.5">From Date</label>
-                                <input type="date" id="stmt-start" value="${startStr}" 
+                                <input type="date" id="stmt-start" value="${startDate}" 
                                     class="w-full min-w-0 bg-slate-900 border border-slate-800 rounded-lg px-2 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-sky-500">
                             </div>
                             <div class="min-w-0">
                                 <label class="block text-[8px] text-slate-500 uppercase font-bold tracking-tight mb-0.5 ml-0.5">To Date</label>
-                                <input type="date" id="stmt-end" value="${endStr}" 
+                                <input type="date" id="stmt-end" value="${endDate}" 
                                     class="w-full min-w-0 bg-slate-900 border border-slate-800 rounded-lg px-2 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-sky-500">
                             </div>
                         </div>
@@ -1461,11 +1452,17 @@ const AppLogic = {
                                     </optgroup>
                                 </select>
                             </div>
-                            <div class="col-span-1 min-w-0">
+                            <div class="col-span-1 min-w-0 flex space-x-1">
                                 <button onclick="AppLogic.showStatement('${type}', ${id}, document.getElementById('stmt-start').value, document.getElementById('stmt-end').value, document.getElementById('stmt-advanced-filter').value)" 
-                                    class="w-full bg-sky-500/20 text-sky-400 border border-sky-500/30 hover:bg-sky-500/30 py-1.5 rounded-lg text-[11px] font-bold transition-all uppercase tracking-tight flex items-center justify-center space-x-1">
+                                    class="flex-1 bg-sky-500/20 text-sky-400 border border-sky-500/30 hover:bg-sky-500/30 py-1.5 rounded-lg text-[11px] font-bold transition-all uppercase tracking-tight flex items-center justify-center space-x-1">
                                     <i class="fas fa-filter text-[9px]"></i><span>Filter</span>
                                 </button>
+                                ${startDate || endDate || advancedFilterId ? `
+                                    <button onclick="AppLogic.showStatement('${type}', ${id}, '', '', '')" 
+                                        class="px-2 bg-slate-800 text-slate-400 hover:text-white rounded-lg text-[10px] font-bold transition-all" title="Reset Filters">
+                                        <i class="fas fa-undo"></i>
+                                    </button>
+                                ` : ''}
                             </div>
                         </div>
                     </div>
@@ -1488,49 +1485,13 @@ const AppLogic = {
                                         <td colspan="5" class="py-12 text-center text-slate-600 text-[10px] uppercase tracking-widest italic">No transactions found in this period</td>
                                     </tr>
                                 ` : statementRows.map(t => {
-            let relatedName = '-';
-            if (type === 'account') {
-                if (t.type === 'contra') {
-                    const otherAccId = String(t.accountId) == String(id) ? t.toId : t.accountId;
-                    const otherAcc = Store.data.accounts.find(a => a.id == otherAccId) || Store.data.ledgers.find(l => l.id == otherAccId);
-                    relatedName = otherAcc ? `Trf: ${otherAcc.name}` : 'Transfer';
-                } else if (t.type === 'passthrough') {
-                    const led = Store.data.ledgers.find(l => l.id == t.ledgerId);
-                    relatedName = led ? led.name : 'Expense';
-                } else {
-                    const led = Store.data.ledgers.find(l => l.id == t.ledgerId);
-                    if (led) relatedName = led.name;
-                }
-            } else {
-                // Ledger Statement
-                if (t.type === 'contra') {
-                    const otherId = String(t.accountId) == String(id) ? t.toId : t.accountId;
-                    const other = Store.data.accounts.find(a => a.id == otherId) || Store.data.ledgers.find(l => l.id == otherId);
-                    relatedName = other ? `Trf: ${other.name}` : 'Transfer';
-                } else if (t.type === 'passthrough') {
-                    if (String(t.accountId) == String(id)) {
-                        const expLed = Store.data.ledgers.find(l => l.id == t.ledgerId);
-                        relatedName = expLed ? `Exp: ${expLed.name}` : 'Expense';
-                    } else {
-                        const viaLed = Store.data.ledgers.find(l => l.id == t.accountId) || Store.data.accounts.find(a => a.id == t.accountId);
-                        relatedName = viaLed ? `Via: ${viaLed.name}` : 'Pass-Through';
-                    }
-                } else {
-                    const acc = Store.data.accounts.find(a => a.id == t.accountId);
-                    if (acc) relatedName = acc.name;
-                    else {
-                        const fromLed = Store.data.ledgers.find(l => l.id == t.accountId);
-                        if (fromLed) relatedName = fromLed.name;
-                    }
-                }
-            }
-
+            const relatedName = this.getRelatedName(t, type, id);
             return `
                                         <tr onclick="AppLogic.editTx(${t.id})" class="hover:bg-slate-800/60 active:bg-slate-800/80 transition-colors cursor-pointer group">
                                             <td class="py-2.5 px-2 whitespace-nowrap text-slate-400 text-[10px] font-orbitron group-hover:text-sky-400 transition-colors">${t.date.split('-').slice(1).reverse().join('/')}</td>
                                             <td class="py-2.5 px-2 max-w-[130px] sm:max-w-[180px]">
                                                 <div class="text-[10px] text-sky-400 font-bold uppercase truncate">
-                                                    ${t.type === 'contra' ? relatedName : (relatedName || 'General')}
+                                                    ${relatedName}
                                                 </div>
                                                 <div class="text-[9px] text-slate-500 truncate mt-0.5" title="${t.remark}">${t.remark || '-'}</div>
                                             </td>
@@ -1545,7 +1506,7 @@ const AppLogic = {
 
                                 <!-- Opening Balance Row -->
                                 <tr class="bg-slate-950/60">
-                                    <td class="py-2.5 px-2 text-slate-500 font-orbitron text-[10px]">${startStr.split('-').slice(1).reverse().join('/')}</td>
+                                    <td class="py-2.5 px-2 text-slate-500 font-orbitron text-[10px]">${startDate ? startDate.split('-').slice(1).reverse().join('/') : 'Opening'}</td>
                                     <td class="py-2.5 px-2 text-[10px] text-slate-400 font-bold uppercase tracking-tight" colspan="3">Opening Balance (B/F)</td>
                                     <td class="py-2.5 px-2 text-right font-orbitron text-xs text-slate-400">
                                         ${periodOpeningBal >= 0 ? '+' : ''}${periodOpeningBal.toFixed(3)}
@@ -1584,81 +1545,45 @@ const AppLogic = {
         const accounts = Store.data.accounts;
         const rollingLedgers = Store.data.ledgers.filter(l => l.groupId > 2);
 
-        // Default to current month if dates not provided
-        const now = new Date();
-        if (!startStr) {
-            const firstDay = new Date(now.getFullYear(), now.getMonth(), 1);
-            startStr = firstDay.toISOString().split('T')[0];
-        }
-        if (!endStr) {
-            endStr = now.toISOString().split('T')[0];
-        }
+        const startDate = startStr || '';
+        const endDate = endStr || '';
 
         // 1. Calculate Initial Base (Absolute Opening Balances)
         const initialAccountsVal = accounts.reduce((sum, a) => sum + (a.openingBalance || 0), 0);
-        const initialRollingVal = rollingLedgers.reduce((sum, l) => sum + (l.openingBalance || 0), 0);
-        let absoluteBaseNetWorth = initialAccountsVal + initialRollingVal;
+        const initialRollingVal = rollingLedgers.reduce((sum, l) => {
+            const isPayable = Store.isPayableLedger(l);
+            const ob = l.openingBalance || 0;
+            return sum + (isPayable ? -ob : ob);
+        }, 0);
+        let absoluteBaseNetWorth = Store.round3(initialAccountsVal + initialRollingVal);
 
-        // 2. Sort ALL transactions to calculate current position
+        // 2. Sort ALL transactions
         const allTxs = [...Store.data.transactions].sort((a, b) => {
             if (a.date !== b.date) return a.date.localeCompare(b.date);
             return a.id - b.id;
         });
 
-        // Utility to calculate impact of a single transaction on "Internal Net Worth"
+        // Utility to calculate impact of a single transaction on Net Worth
         const getImpact = (t) => {
             let impact = 0;
-            if (t.type === 'expense') {
-                const fromAcc = accounts.find(a => a.id == t.accountId);
-                const toLed = Store.data.ledgers.find(l => l.id == t.ledgerId);
-                if (fromAcc) impact -= t.amount;
-                if (toLed && toLed.groupId > 2) impact += t.amount;
-            } else if (t.type === 'income') {
-                const toAcc = accounts.find(a => a.id == t.accountId);
-                const fromLed = Store.data.ledgers.find(l => l.id == t.ledgerId);
-                if (toAcc) impact += t.amount;
-                if (fromLed && fromLed.groupId > 2) impact -= t.amount;
-            } else if (t.type === 'contra') {
-                const from = accounts.find(a => a.id == t.accountId) || Store.data.ledgers.find(l => l.id == t.accountId);
-                const to = accounts.find(a => a.id == t.toId) || Store.data.ledgers.find(l => l.id == t.toId);
-
-                if (from && to) {
-                    const fromIsLedger = from.groupId !== undefined;
-                    const toIsLedger = to.groupId !== undefined;
-
-                    if (fromIsLedger && toIsLedger) {
-                        // Ledger-to-Ledger transfer: net impact is zero
-                        impact = 0;
-                    } else {
-                        // Regular Account/Ledger Transfer
-                        if (from.groupId === undefined || from.groupId > 2) impact -= t.amount;
-                        if (to.groupId === undefined || to.groupId > 2) impact += t.amount;
-                    }
-                }
-            } else if (t.type === 'passthrough') {
-                const from = accounts.find(a => a.id == t.accountId) || Store.data.ledgers.find(l => l.id == t.accountId);
-                const to = Store.data.ledgers.find(l => l.id == t.ledgerId);
-
-                if (from && to) {
-                    const fromIsLedger = from.groupId !== undefined;
-                    if (fromIsLedger) {
-                        // Ledger-to-Ledger transfer: net impact is zero
-                        impact = 0;
-                    } else {
-                        // Regular Account/Ledger Transfer
-                        if (from.groupId === undefined || from.groupId > 2) impact -= t.amount;
-                        if (to.groupId === undefined || to.groupId > 2) impact += t.amount;
-                    }
-                }
-            }
-            return impact;
+            accounts.forEach(a => {
+                impact += Store.getTransactionEffect(t, 'account', a.id);
+            });
+            rollingLedgers.forEach(l => {
+                const isPayable = Store.isPayableLedger(l);
+                const effect = Store.getTransactionEffect(t, 'ledger', l.id);
+                impact += isPayable ? -effect : effect;
+            });
+            return Store.round3(impact);
         };
 
-        // 3. Calculate Opening Net Worth for the period (Base + everything before startStr)
+        // 3. Calculate Opening Net Worth for the period
         let periodOpeningNetWorth = absoluteBaseNetWorth;
-        allTxs.filter(t => t.date < startStr).forEach(t => {
-            periodOpeningNetWorth += getImpact(t);
-        });
+        if (startDate) {
+            allTxs.filter(t => t.date < startDate).forEach(t => {
+                periodOpeningNetWorth = Store.round3(periodOpeningNetWorth + getImpact(t));
+            });
+        }
 
         // 4. Process period transactions
         let runningNetWorth = periodOpeningNetWorth;
@@ -1666,12 +1591,15 @@ const AppLogic = {
         let totalNetOut = 0;
         const statementRows = [];
 
-        allTxs.filter(t => t.date >= startStr && t.date <= endStr).forEach(t => {
+        allTxs.forEach(t => {
+            if (startDate && t.date < startDate) return;
+            if (endDate && t.date > endDate) return;
+
             const impact = getImpact(t);
             if (Math.abs(impact) > 0.0001) {
-                runningNetWorth += impact;
-                if (impact > 0) totalNetIn += impact;
-                else totalNetOut += Math.abs(impact);
+                runningNetWorth = Store.round3(runningNetWorth + impact);
+                if (impact > 0) totalNetIn = Store.round3(totalNetIn + impact);
+                else totalNetOut = Store.round3(totalNetOut + Math.abs(impact));
 
                 statementRows.push({
                     date: t.date,
@@ -1684,7 +1612,7 @@ const AppLogic = {
             }
         });
 
-        // 5. APPLY STRICT DESC SORT FOR DISPLAY
+        // 5. Display Sort
         statementRows.sort((a, b) => {
             if (b.date !== a.date) return b.date.localeCompare(a.date);
             return b.id - a.id;
@@ -1722,12 +1650,12 @@ const AppLogic = {
                 <div class="bg-slate-950/60 p-2.5 rounded-xl border border-slate-800/60 grid grid-cols-2 sm:grid-cols-3 gap-2 mt-2">
                     <div class="min-w-0">
                         <label class="block text-[8px] text-slate-500 uppercase font-bold tracking-tight mb-0.5 ml-0.5">From Date</label>
-                        <input type="date" id="nw-start" value="${startStr}" 
+                        <input type="date" id="nw-start" value="${startDate}" 
                             class="w-full min-w-0 bg-slate-900 border border-slate-800 rounded-lg px-2 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-teal-500">
                     </div>
                     <div class="min-w-0">
                         <label class="block text-[8px] text-slate-500 uppercase font-bold tracking-tight mb-0.5 ml-0.5">To Date</label>
-                        <input type="date" id="nw-end" value="${endStr}" 
+                        <input type="date" id="nw-end" value="${endDate}" 
                             class="w-full min-w-0 bg-slate-900 border border-slate-800 rounded-lg px-2 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-teal-500">
                     </div>
                     <div class="col-span-2 sm:col-span-1 flex items-end min-w-0">
@@ -1753,7 +1681,7 @@ const AppLogic = {
                         <tbody class="divide-y divide-slate-800/30">
                             ${statementHtml}
                             <tr class="bg-slate-950/60">
-                                <td class="py-2.5 px-2 text-[10px] text-slate-500 font-bold uppercase" colspan="2">Net Worth (B/F) at ${startStr.split('-').reverse().slice(0, 2).join('/')}</td>
+                                <td class="py-2.5 px-2 text-[10px] text-slate-500 font-bold uppercase" colspan="2">Net Worth (B/F) ${startDate ? `at ${startDate.split('-').reverse().slice(0, 2).join('/')}` : ''}</td>
                                 <td class="py-2.5 px-2" colspan="2"></td>
                                 <td class="py-2.5 px-2 text-right font-orbitron text-xs text-slate-400">
                                     ${periodOpeningNetWorth.toFixed(3)}
@@ -1910,130 +1838,56 @@ const AppLogic = {
 
     exportStatementToExcel(type, id, startStr, endStr, advancedFilterId) {
         const item = Store.data[type + 's'].find(i => i.id == id);
+        if (!item) return;
 
-        // Use provided dates or default to current month
-        const now = new Date();
-        if (!startStr) {
-            const firstDay = new Date(now.getFullYear(), now.getMonth(), 1);
-            startStr = firstDay.toISOString().split('T')[0];
-        }
-        if (!endStr) {
-            endStr = now.toISOString().split('T')[0];
-        }
+        const startDate = startStr || '';
+        const endDate = endStr || '';
 
-        const allRelevantTxs = Store.data.transactions.filter(t => {
-            const targetId = String(id);
-            const tFromId = String(t.accountId);
-            const tToId = String(t.toId);
-            const tLedId = String(t.ledgerId);
+        // Sort ALL transactions chronologically
+        const sortedTxs = [...Store.data.transactions].sort((a, b) => {
+            if (a.date !== b.date) return a.date.localeCompare(b.date);
+            return a.id - b.id;
+        });
 
-            let isRelevant = false;
-            if (type === 'account') {
-                if (t.type === 'contra') {
-                    const from = Store.data.accounts.find(a => String(a.id) === tFromId);
-                    const to = Store.data.accounts.find(a => String(a.id) === tToId);
-                    isRelevant = (tFromId === targetId && from) || (tToId === targetId && to);
-                } else {
-                    isRelevant = tFromId === targetId;
+        // 1. Calculate Opening Balance before startDate
+        let periodOpeningBal = Store.round3(item.openingBalance || 0);
+        if (startDate) {
+            sortedTxs.forEach(t => {
+                if (t.date < startDate) {
+                    const effect = Store.getTransactionEffect(t, type, id);
+                    if (effect !== 0) {
+                        periodOpeningBal = Store.round3(periodOpeningBal + effect);
+                    }
                 }
-            } else {
-                if (t.type === 'contra') {
-                    const from = Store.data.ledgers.find(l => String(l.id) === tFromId);
-                    const to = Store.data.ledgers.find(l => String(l.id) === tToId);
-                    isRelevant = (tFromId === targetId && from) || (tToId === targetId && to);
-                } else {
-                    isRelevant = tLedId === targetId;
-                }
-            }
-            if (!isRelevant) return false;
+            });
+        }
+
+        // 2. Filter and Process Period Transactions
+        let runningBal = periodOpeningBal;
+        const csvRowsArray = [];
+
+        sortedTxs.forEach(t => {
+            if (startDate && t.date < startDate) return;
+            if (endDate && t.date > endDate) return;
+
+            const effect = Store.getTransactionEffect(t, type, id);
+            if (effect === 0) return;
 
             if (advancedFilterId) {
                 const isFilterAcc = advancedFilterId.startsWith('acc_');
                 const filterId = advancedFilterId.split('_')[1];
-                if (isFilterAcc) {
-                    if (t.type === 'contra') {
-                        const fromAcc = Store.data.accounts.find(a => String(a.id) === tFromId);
-                        if (fromAcc) return tFromId === filterId || tToId === filterId;
-                        return false;
-                    } else {
-                        return tFromId === filterId;
-                    }
-                } else {
-                    if (t.type === 'contra') {
-                        const fromLed = Store.data.ledgers.find(l => String(l.id) === tFromId);
-                        if (fromLed) return tFromId === filterId || tToId === filterId;
-                        return false;
-                    } else {
-                        return tLedId === filterId;
-                    }
+                const other = this.getOtherParty(t, type, id);
+                if (!other || other.type !== (isFilterAcc ? 'account' : 'ledger') || String(other.id) !== filterId) {
+                    return;
                 }
             }
-            return true;
-        }).sort((a, b) => a.id - b.id);
 
-        // 1. Calculate Opening Balance for the period
-        let periodOpeningBal = item.openingBalance || 0;
-        const prePeriodTxs = allRelevantTxs.filter(t => t.date < startStr);
+            const isIn = effect > 0;
+            const isOut = effect < 0;
+            const amount = Math.abs(effect);
+            runningBal = Store.round3(runningBal + effect);
 
-        prePeriodTxs.forEach(t => {
-            let isIn = false, isOut = false;
-            if (type === 'account') {
-                isOut = (t.type === 'expense' && t.accountId == id) || (t.type === 'contra' && t.accountId == id);
-                isIn = (t.type === 'income' && t.accountId == id) || (t.type === 'contra' && t.toId == id);
-            } else {
-                isOut = (t.type === 'expense' && t.ledgerId == id) || (t.type === 'contra' && t.toId == id);
-                isIn = (t.type === 'income' && t.ledgerId == id) || (t.type === 'contra' && t.accountId == id);
-            }
-
-            if (isIn) {
-                periodOpeningBal += (type === 'ledger' && item.groupId > 2) ? -t.amount : t.amount;
-            }
-            if (isOut) {
-                periodOpeningBal += (type === 'ledger' && item.groupId > 2) ? t.amount : -t.amount;
-            }
-        });
-
-        // 2. Filter Period Transactions
-        const periodTxs = allRelevantTxs.filter(t => t.date >= startStr && t.date <= endStr);
-
-        let csv = "Date,Related To,Remark,Paid (Out),Recv (In),Balance\n";
-
-        // Opening Balance Row in CSV
-        csv += `${startStr.split('-').reverse().join('/')},Opening Balance (B/F),Calculated Value before period,,,\"${periodOpeningBal.toFixed(3)}\"\n`;
-
-        let runningBal = periodOpeningBal;
-        const csvRowsArray = [];
-        periodTxs.forEach(t => {
-            let isIn = false, isOut = false;
-            if (type === 'account') {
-                isOut = (t.type === 'expense' && t.accountId == id) || (t.type === 'contra' && t.accountId == id);
-                isIn = (t.type === 'income' && t.accountId == id) || (t.type === 'contra' && t.toId == id);
-            } else {
-                isOut = (t.type === 'expense' && t.ledgerId == id) || (t.type === 'contra' && t.toId == id);
-                isIn = (t.type === 'income' && t.ledgerId == id) || (t.type === 'contra' && t.accountId == id);
-            }
-
-            if (isIn) runningBal += (type === 'ledger' && item.groupId > 2) ? -t.amount : t.amount;
-            if (isOut) runningBal += (type === 'ledger' && item.groupId > 2) ? t.amount : -t.amount;
-
-            let relatedName = '-';
-            if (type === 'account') {
-                const led = Store.data.ledgers.find(l => l.id == t.ledgerId);
-                if (led) relatedName = led.name;
-                else if (t.type === 'contra') {
-                    const otherAccId = t.accountId == id ? t.toId : t.accountId;
-                    const otherAcc = Store.data.accounts.find(a => a.id == otherAccId);
-                    relatedName = otherAcc ? `Trf: ${otherAcc.name}` : 'Transfer';
-                }
-            } else {
-                const acc = Store.data.accounts.find(a => a.id == t.accountId);
-                if (acc) relatedName = acc.name;
-                else if (t.type === 'contra') {
-                    const otherId = t.accountId == id ? t.toId : t.accountId;
-                    const other = Store.data.accounts.find(a => a.id == otherId) || Store.data.ledgers.find(l => l.id == otherId);
-                    relatedName = other ? `Trf: ${other.name}` : 'Transfer';
-                }
-            }
+            const relatedName = this.getRelatedName(t, type, id);
 
             csvRowsArray.push({
                 date: t.date,
@@ -2042,8 +1896,8 @@ const AppLogic = {
                     t.date.split('-').reverse().join('/'),
                     `\"${relatedName}\"`,
                     `\"${t.remark || ''}\"`,
-                    isOut ? t.amount.toFixed(3) : '0.000',
-                    isIn ? t.amount.toFixed(3) : '0.000',
+                    isOut ? amount.toFixed(3) : '0.000',
+                    isIn ? amount.toFixed(3) : '0.000',
                     `\"${runningBal.toFixed(3)}\"`
                 ]
             });
@@ -2055,6 +1909,10 @@ const AppLogic = {
             return b.id - a.id;
         });
 
+        let csv = "Date,Related To,Remark,Paid (Out),Recv (In),Balance\n";
+        // Opening Balance Row in CSV
+        csv += `${startDate ? startDate.split('-').reverse().join('/') : 'Opening'},Opening Balance (B/F),Calculated Value before period,,,\"${periodOpeningBal.toFixed(3)}\"\n`;
+
         // Add Sorted Rows to CSV
         csvRowsArray.forEach(r => {
             csv += r.cells.join(',') + "\n";
@@ -2064,7 +1922,7 @@ const AppLogic = {
         const link = document.createElement("a");
         const url = URL.createObjectURL(blob);
         link.setAttribute("href", url);
-        link.setAttribute("download", `${item.name}_Statement_${startStr}_to_${endStr}.csv`);
+        link.setAttribute("download", `${item.name}_Statement_${startDate || 'All'}_to_${endDate || 'Latest'}.csv`);
         link.style.visibility = 'hidden';
         document.body.appendChild(link);
         link.click();
@@ -3199,6 +3057,59 @@ const AppLogic = {
                 currencyField.disabled = false;
             }
         }
+    },
+
+    verifyBalance(type, id) {
+        const item = Store.data[type + 's'].find(i => i.id == id);
+        if (!item) return { error: 'Item not found' };
+
+        const ob = Store.round3(item.openingBalance || 0);
+        let calculated = ob;
+        let totalIn = 0;
+        let totalOut = 0;
+        let txCount = 0;
+
+        Store.data.transactions.forEach(t => {
+            const effect = Store.getTransactionEffect(t, type, id);
+            if (effect !== 0) {
+                txCount++;
+                if (effect > 0) totalIn = Store.round3(totalIn + effect);
+                if (effect < 0) totalOut = Store.round3(totalOut + Math.abs(effect));
+                calculated = Store.round3(calculated + effect);
+            }
+        });
+
+        const stored = Store.round3(item.balance || 0);
+        const match = Math.abs(calculated - stored) < 0.0001;
+
+        return {
+            name: item.name,
+            type,
+            id,
+            openingBalance: ob,
+            totalIn,
+            totalOut,
+            calculatedBalance: calculated,
+            storedBalance: stored,
+            txCount,
+            formulaCheck: `${ob} + ${totalIn} - ${totalOut} = ${Store.round3(ob + totalIn - totalOut)}`,
+            matches: match
+        };
+    },
+
+    verifyAllBalances() {
+        const results = { accounts: [], ledgers: [], allMatch: true };
+        Store.data.accounts.forEach(a => {
+            const res = this.verifyBalance('account', a.id);
+            if (!res.matches) results.allMatch = false;
+            results.accounts.push(res);
+        });
+        Store.data.ledgers.filter(l => l.groupId > 2).forEach(l => {
+            const res = this.verifyBalance('ledger', l.id);
+            if (!res.matches) results.allMatch = false;
+            results.ledgers.push(res);
+        });
+        return results;
     },
 }
 
