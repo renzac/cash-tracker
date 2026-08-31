@@ -9,7 +9,7 @@
     <meta name="theme-color" content="#0f172a">
     <title>Antigravity Finance</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <link rel="stylesheet" href="style.css?v=13">
+    <link rel="stylesheet" href="style.css?v=22">
     <link rel="manifest" href="manifest.json">
 
     <!-- iOS PWA Tags -->
@@ -79,6 +79,25 @@
                     <i class="fas fa-fingerprint text-2xl"></i>
                     <span>Login with Biometrics</span>
                 </button>
+            </div>
+
+            <!-- Device Cache Recovery Check -->
+            <div class="mt-4">
+                <button onclick="
+                    try {
+                        const d = JSON.parse(localStorage.getItem('ag-finance-data') || '{}');
+                        const count = d?.transactions?.length || 0;
+                        const mod = d?.lastModified || 'Never';
+                        document.getElementById('cache-result').innerHTML = count > 0
+                            ? '<span style=\'color:#34d399\'>✅ Found ' + count + ' transactions in this device!<br>Last saved: ' + mod + '<br><br>Log in then go Admin → Recover from Device Cache</span>'
+                            : '<span style=\'color:#f87171\'>❌ No transactions found in this device cache.<br>Last modified: ' + mod + '</span>';
+                    } catch(e) {
+                        document.getElementById('cache-result').innerHTML = '<span style=\'color:#f87171\'>Error: ' + e.message + '</span>';
+                    }
+                " class="w-full text-xs text-amber-400 border border-amber-500/30 bg-amber-500/10 rounded-xl py-2 px-4 hover:bg-amber-500/20 transition-all">
+                    🔍 Check This Device for Cached Data
+                </button>
+                <div id="cache-result" class="mt-2 text-xs text-center leading-relaxed px-2"></div>
             </div>
         </div>
     </div>
@@ -335,7 +354,27 @@
                                 <div class="text-left">
                                     <div class="font-bold">Import Database</div>
                                     <div class="text-[10px] text-slate-400 uppercase tracking-widest font-orbitron">
-                                        Upload JSON</div>
+                                        Upload JSON File</div>
+                                </div>
+                            </button>
+                            <button onclick="window.AppLogic.restoreFromSnapshot()"
+                                class="flex items-center justify-center space-x-3 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 px-6 py-4 rounded-2xl transition-all border border-emerald-500/20 shadow-xl group">
+                                <i
+                                    class="fas fa-history text-emerald-400 group-hover:scale-110 transition-transform"></i>
+                                <div class="text-left">
+                                    <div class="font-bold">1-Click Restore (current_state.json)</div>
+                                    <div class="text-[10px] text-emerald-400/70 uppercase tracking-widest font-orbitron">
+                                        Restore 2,461 historical records</div>
+                                </div>
+                            </button>
+                            <button onclick="window.AppLogic.recoverFromLocalStorage()"
+                                class="flex items-center justify-center space-x-3 bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 px-6 py-4 rounded-2xl transition-all border border-amber-500/20 shadow-xl group">
+                                <i
+                                    class="fas fa-hdd text-amber-400 group-hover:scale-110 transition-transform"></i>
+                                <div class="text-left">
+                                    <div class="font-bold">Recover from Device Cache</div>
+                                    <div class="text-[10px] text-amber-400/70 uppercase tracking-widest font-orbitron">
+                                        Restore from this phone/PC's browser</div>
                                 </div>
                             </button>
                         </div>
@@ -513,9 +552,9 @@
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script src="store.js?v=13"></script>
-    <script src="logic.js?v=13"></script>
-    <script src="auth.js?v=13"></script>
+    <script src="store.js?v=23"></script>
+    <script src="logic.js?v=23"></script>
+    <script src="auth.js?v=23"></script>
     <script>
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {

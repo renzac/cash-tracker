@@ -16,7 +16,7 @@ if (SUPABASE_URL.trim() && SUPABASE_KEY.trim()) {
 const Store = {
     data: {
         users: [
-            { id: 1, username: 'Admin', password: 'Ren@007', role: 'admin', enabled: true },
+            { id: 1, username: 'Admin', password: '007', role: 'admin', enabled: true },
             { id: 2, username: 'renju', password: 'renjuroshan', role: 'user', enabled: true }
         ],
         ledgerGroups: [
@@ -58,9 +58,23 @@ const Store = {
             // LOAD STATUS: 'SUCCESS' | 'EMPTY' | 'ERROR' codes
             const loadStatus = await this.loadFromCloud();
 
-            if (loadStatus === 'SUCCESS' || loadStatus === 'EMPTY') {
+            if (loadStatus === 'SUCCESS') {
                 this.cloudLoaded = true;
                 this.syncBlocked = false;
+            } else if (loadStatus === 'EMPTY') {
+                this.cloudLoaded = true;
+                this.syncBlocked = false;
+                const localData = localStorage.getItem(DB_KEY);
+                if (localData) {
+                    console.log("Store: Cloud empty, restoring from localStorage...");
+                    try {
+                        this.data = { ...this.data, ...JSON.parse(localData) };
+                        this.sanitizeData();
+                        await this.saveToCloud();
+                    } catch(e) {
+                        console.error("Store: Error parsing local backup:", e);
+                    }
+                }
             } else {
                 // If cloud load failed due to connection, BLOCK saving
                 // We use local fallback ONLY for viewing, but we don't allow overwrite
@@ -69,13 +83,23 @@ const Store = {
 
                 const localData = localStorage.getItem(DB_KEY);
                 if (localData) {
-                    this.data = { ...this.data, ...JSON.parse(localData) };
+                    try {
+                        this.data = { ...this.data, ...JSON.parse(localData) };
+                        this.sanitizeData();
+                    } catch(e) {
+                        console.error("Store: Error parsing local fallback:", e);
+                    }
                 }
             }
         } else {
             const savedData = localStorage.getItem(DB_KEY);
             if (savedData) {
-                this.data = JSON.parse(savedData);
+                try {
+                    this.data = JSON.parse(savedData);
+                    this.sanitizeData();
+                } catch(e) {
+                    console.error("Store: Error parsing savedData:", e);
+                }
             }
         }
 
@@ -91,15 +115,48 @@ const Store = {
         }
 
         // --- ENSURE DEFAULTS & MIGRATIONS ---
-        // Crucial for login: ensure users array exists
-        if (!this.data.users || this.data.users.length === 0) {
+        this.sanitizeData();
+
+        // Authoritative balance recalculation on startup
+        if (!this.syncBlocked) {
+            await this.recalculateBalances();
+        } else {
+            this.data.accounts.forEach(a => {
+                a.openingBalance = this.round3(a.openingBalance || 0);
+                let bal = a.openingBalance;
+                (this.data.transactions || []).forEach(tx => {
+                    bal += this.getTransactionEffect(tx, 'account', a.id);
+                });
+                a.balance = this.round3(bal);
+            });
+            this.data.ledgers.forEach(l => {
+                l.openingBalance = this.round3(l.openingBalance || 0);
+                if (l.groupId > 2) {
+                    let bal = l.openingBalance;
+                    (this.data.transactions || []).forEach(tx => {
+                        bal += this.getTransactionEffect(tx, 'ledger', l.id);
+                    });
+                    l.balance = this.round3(bal);
+                } else {
+                    l.balance = 0;
+                }
+            });
+        }
+    },
+
+    sanitizeData() {
+        if (!this.data || typeof this.data !== 'object') this.data = {};
+
+        // Users
+        if (!Array.isArray(this.data.users) || this.data.users.length === 0) {
             this.data.users = [
-                { id: 1, username: 'Admin', password: 'Ren@007', role: 'admin', enabled: true },
+                { id: 1, username: 'Admin', password: '007', role: 'admin', enabled: true },
                 { id: 2, username: 'renju', password: 'renjuroshan', role: 'user', enabled: true }
             ];
         }
 
-        if (!this.data.ledgerGroups) {
+        // Ledger Groups
+        if (!Array.isArray(this.data.ledgerGroups) || this.data.ledgerGroups.length === 0) {
             this.data.ledgerGroups = [
                 { id: 1, name: 'Indirect Income', enabled: true },
                 { id: 2, name: 'Indirect Expense', enabled: true },
@@ -109,44 +166,42 @@ const Store = {
             ];
         }
 
-        // Ensure all accounts/ledgers have openingBalance
-        if (this.data.accounts) {
-            this.data.accounts.forEach(a => { if (a.openingBalance === undefined) a.openingBalance = 0; });
-        }
-        if (this.data.ledgers) {
-            this.data.ledgers.forEach(l => {
-                if (l.balance === undefined) l.balance = 0;
-                if (l.openingBalance === undefined) l.openingBalance = 0;
-            });
-        }
+        // Accounts
+        if (!Array.isArray(this.data.accounts)) this.data.accounts = [];
+        this.data.accounts.forEach(a => {
+            if (a.balance === undefined) a.balance = 0;
+            if (a.openingBalance === undefined) a.openingBalance = 0;
+            if (a.enabled === undefined) a.enabled = true;
+        });
 
-        // --- NEW: LOAN PORTFOLIO DEFAULTS ---
-        if (!this.data.loans) this.data.loans = [];
-        if (!this.data.loanPayments) this.data.loanPayments = [];
+        // Ledgers
+        if (!Array.isArray(this.data.ledgers)) this.data.ledgers = [];
+        this.data.ledgers.forEach(l => {
+            if (l.balance === undefined) l.balance = 0;
+            if (l.openingBalance === undefined) l.openingBalance = 0;
+            if (l.enabled === undefined) l.enabled = true;
+        });
 
-        // Authoritative balance recalculation on startup
-        if (!this.syncBlocked) {
-            await this.recalculateBalances();
+        // Loans
+        if (!Array.isArray(this.data.loans)) this.data.loans = [];
+        if (!Array.isArray(this.data.loanPayments)) this.data.loanPayments = [];
+
+        // Transactions: ensure valid array, valid dates, and numeric amounts
+        if (!Array.isArray(this.data.transactions)) {
+            this.data.transactions = [];
         } else {
-            this.data.accounts.forEach(a => {
-                a.openingBalance = this.round3(a.openingBalance || 0);
-                let bal = a.openingBalance;
-                this.data.transactions.forEach(tx => {
-                    bal += this.getTransactionEffect(tx, 'account', a.id);
-                });
-                a.balance = this.round3(bal);
-            });
-            this.data.ledgers.forEach(l => {
-                l.openingBalance = this.round3(l.openingBalance || 0);
-                if (l.groupId > 2) {
-                    let bal = l.openingBalance;
-                    this.data.transactions.forEach(tx => {
-                        bal += this.getTransactionEffect(tx, 'ledger', l.id);
-                    });
-                    l.balance = this.round3(bal);
-                } else {
-                    l.balance = 0;
+            this.data.transactions = this.data.transactions.filter(Boolean).map(t => {
+                if (!t.id) t.id = Date.now();
+                if (!t.date) {
+                    const numId = Number(t.id);
+                    if (numId > 1500000000000 && numId < 3000000000000) {
+                        t.date = new Date(numId).toISOString().split('T')[0];
+                    } else {
+                        t.date = new Date().toISOString().split('T')[0];
+                    }
                 }
+                t.amount = parseFloat(t.amount) || 0;
+                return t;
             });
         }
     },
@@ -181,16 +236,19 @@ const Store = {
                 // CRITICAL: Preserve local Auth object before overwriting data
                 const currentAuth = this.data.auth || { currentUser: null, rememberMe: false, biometricsEnabled: false };
 
-                this.data = data.payload;
+                this.data = data.payload || {};
 
                 // Restore Auth immediately
                 this.data.auth = currentAuth;
+
+                this.sanitizeData();
 
                 console.log("Store: Cloud data loaded successfully.");
                 return 'SUCCESS';
             } else if (error) {
                 if (error.code === 'PGRST116') {
                     console.log("Store: Cloud database is empty (no data found).");
+                    this.sanitizeData();
                     return 'EMPTY';
                 }
                 console.error("Store: Cloud load error:", error.message);

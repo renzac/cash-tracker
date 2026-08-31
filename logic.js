@@ -538,31 +538,35 @@ const AppLogic = {
         const list = document.getElementById('tx-history-list');
         if (!list) return;
 
-        const searchQuery = document.getElementById('history-search')?.value.toLowerCase();
-        const dateFilter = document.getElementById('history-date-filter')?.value;
+        const searchQuery = document.getElementById('history-search')?.value.toLowerCase().trim() || "";
+        const dateFilter = document.getElementById('history-date-filter')?.value || "";
 
-        let txs = [...Store.data.transactions].sort((a, b) => {
-            if (b.date !== a.date) return b.date.localeCompare(a.date);
-            return b.id - a.id; // Newest creation time first for same date
+        let txs = [...(Store.data.transactions || [])].filter(Boolean).sort((a, b) => {
+            const dateA = String(a.date || '');
+            const dateB = String(b.date || '');
+            if (dateB !== dateA) return dateB.localeCompare(dateA);
+            return (Number(b.id) || 0) - (Number(a.id) || 0); // Newest creation time first for same date
         });
 
         // Apply Date Filter
         if (dateFilter) {
             txs = txs.filter(t => t.date === dateFilter);
-        } else if (!searchQuery) {
-            // Show last 50 entries by default if no filters
-            txs = txs.slice(0, 50);
         }
 
         // Apply Search Filter
         if (searchQuery) {
             txs = txs.filter(t => {
-                const ledgerName = Store.data.ledgers.find(l => l.id == t.ledgerId)?.name.toLowerCase() || "";
-                const accName = (Store.data.accounts.find(a => a.id == t.accountId)?.name || Store.data.ledgers.find(l => l.id == t.accountId)?.name || "").toLowerCase();
-                const toName = (Store.data.accounts.find(a => a.id == t.toId)?.name || Store.data.ledgers.find(l => l.id == t.toId)?.name || "").toLowerCase();
+                const ledgerName = (Store.data.ledgers.find(l => String(l.id) === String(t.ledgerId))?.name || "").toLowerCase();
+                const accName = (Store.data.accounts.find(a => String(a.id) === String(t.accountId))?.name || Store.data.ledgers.find(l => String(l.id) === String(t.accountId))?.name || "").toLowerCase();
+                const toName = (Store.data.accounts.find(a => String(a.id) === String(t.toId))?.name || Store.data.ledgers.find(l => String(l.id) === String(t.toId))?.name || "").toLowerCase();
                 const remark = (t.remark || "").toLowerCase();
                 return ledgerName.includes(searchQuery) || accName.includes(searchQuery) || toName.includes(searchQuery) || remark.includes(searchQuery);
             });
+        }
+
+        // Show last 50 entries by default if no filters
+        if (!dateFilter && !searchQuery) {
+            txs = txs.slice(0, 50);
         }
 
         if (txs.length === 0) {
@@ -571,25 +575,25 @@ const AppLogic = {
         }
 
         list.innerHTML = txs.map(t => {
-            const fromName = Store.data.accounts.find(a => a.id == t.accountId)?.name ||
-                             Store.data.ledgers.find(l => l.id == t.accountId)?.name || 'Account';
+            const fromName = Store.data.accounts.find(a => String(a.id) === String(t.accountId))?.name ||
+                             Store.data.ledgers.find(l => String(l.id) === String(t.accountId))?.name || 'Account';
             let title = '';
             let subtitle = '';
 
             if (t.type === 'contra') {
-                const toName = Store.data.accounts.find(a => a.id == t.toId)?.name ||
-                               Store.data.ledgers.find(l => l.id == t.toId)?.name || 'Target';
+                const toName = Store.data.accounts.find(a => String(a.id) === String(t.toId))?.name ||
+                               Store.data.ledgers.find(l => String(l.id) === String(t.toId))?.name || 'Target';
                 title = `${fromName} → ${toName}`;
             } else if (t.type === 'passthrough') {
-                const expName = Store.data.ledgers.find(l => l.id == t.ledgerId)?.name || 'Expense';
+                const expName = Store.data.ledgers.find(l => String(l.id) === String(t.ledgerId))?.name || 'Expense';
                 title = expName;
                 subtitle = `<span class="text-violet-400/80 text-xs ml-1 font-medium">via ${fromName}</span>`;
             } else if (t.type === 'income') {
-                const ledName = Store.data.ledgers.find(l => l.id == t.ledgerId)?.name || 'Income';
+                const ledName = Store.data.ledgers.find(l => String(l.id) === String(t.ledgerId))?.name || 'Income';
                 title = ledName;
                 subtitle = `<span class="text-slate-500 text-xs ml-1">to ${fromName}</span>`;
             } else {
-                const ledName = Store.data.ledgers.find(l => l.id == t.ledgerId)?.name || 'Expense';
+                const ledName = Store.data.ledgers.find(l => String(l.id) === String(t.ledgerId))?.name || 'Expense';
                 title = ledName;
                 subtitle = `<span class="text-slate-500 text-xs ml-1">via ${fromName}</span>`;
             }
@@ -603,20 +607,26 @@ const AppLogic = {
                          t.type === 'passthrough' ? 'random' :
                          'exchange-alt';
             const amountPrefix = (t.type === 'expense' || t.type === 'passthrough') ? '-' : (t.type === 'income' ? '+' : '');
+            const parsedAmount = parseFloat(t.amount) || 0;
+            const formattedDate = t.date ? t.date.split('-').reverse().join('/') : '';
 
             return `
                 <div class="tx-card bg-slate-900 border border-slate-800 rounded-2xl p-4 flex items-center justify-between group">
-                    <div class="flex items-center space-x-4">
-                        <div class="w-10 h-10 rounded-full bg-slate-950 flex items-center justify-center ${colorClass}">
+                    <div class="flex items-center space-x-4 min-w-0">
+                        <div class="w-10 h-10 rounded-full bg-slate-950 flex-shrink-0 flex items-center justify-center ${colorClass}">
                             <i class="fas fa-${icon}"></i>
                         </div>
-                        <div>
-                            <div class="font-medium">${title} ${subtitle}</div>
-                            <div class="text-xs text-slate-500">${t.remark || 'No remark'}</div>
+                        <div class="min-w-0">
+                            <div class="font-medium truncate">${title} ${subtitle}</div>
+                            <div class="flex items-center space-x-2 text-xs text-slate-500">
+                                <span class="font-orbitron text-[10px] text-slate-400">${formattedDate}</span>
+                                <span>•</span>
+                                <span class="truncate">${t.remark || 'No remark'}</span>
+                            </div>
                         </div>
                     </div>
-                    <div class="text-right">
-                        <div class="font-orbitron font-bold ${colorClass}">${amountPrefix}${t.amount.toFixed(3)}</div>
+                    <div class="text-right flex-shrink-0 ml-3">
+                        <div class="font-orbitron font-bold ${colorClass}">${amountPrefix}${parsedAmount.toFixed(3)}</div>
                         <div class="flex justify-end space-x-1 md:opacity-0 md:group-hover:opacity-100 transition-all">
                             <button onclick="window.AppLogic.editTx(${t.id})" class="p-3 text-slate-500 hover:text-sky-500 transition-colors cursor-pointer" title="Edit">
                                 <i class="fas fa-edit text-sm"></i>
@@ -1122,32 +1132,101 @@ const AppLogic = {
         document.getElementById('import-input').click();
     },
 
-    importData(event) {
+    async importData(event) {
         const file = event.target.files[0];
         if (!file) return;
 
         const reader = new FileReader();
-        reader.onload = (e) => {
+        reader.onload = async (e) => {
             try {
                 const importedData = JSON.parse(e.target.result);
 
                 // Basic validation
-                if (!importedData.transactions || !importedData.accounts || !importedData.ledgers) {
-                    throw new Error("Invalid format");
+                if (!importedData.transactions && !importedData.accounts && !importedData.ledgers) {
+                    throw new Error("Invalid format: Missing essential database keys");
                 }
 
-                if (confirm("This will overwrite your CURRENT data and logout. Continue?")) {
+                if (confirm(`Restore ${importedData.transactions?.length || 0} transactions from "${file.name}"?`)) {
+                    const currentAuth = Store.data.auth;
                     Store.data = importedData;
-                    Store.save();
-                    Auth.logout();
-                    location.reload();
+                    Store.data.auth = currentAuth;
+                    Store.sanitizeData();
+                    await Store.save();
+                    await this.renderAll();
+                    Auth.showToast(`Database restored: ${Store.data.transactions.length} transactions loaded!`);
                 }
             } catch (err) {
-                Auth.showToast("Invalid backup file", "error");
+                console.error("Import error:", err);
+                Auth.showToast("Invalid backup file: " + err.message, "error");
             }
         };
         reader.readAsText(file);
         event.target.value = ''; // Reset input
+    },
+
+    async restoreFromSnapshot() {
+        if (!confirm("Restore your complete 2,461-transaction database from current_state.json?")) return;
+        Auth.showToast("Restoring from snapshot...");
+        try {
+            const response = await fetch('./current_state.json');
+            if (!response.ok) throw new Error("Could not fetch current_state.json file");
+            const data = await response.json();
+            const currentAuth = Store.data.auth;
+            Store.data = data;
+            Store.data.auth = currentAuth;
+            Store.sanitizeData();
+            await Store.save();
+            await this.renderAll();
+            Auth.showToast(`Restored successfully! ${Store.data.transactions.length} transactions loaded.`);
+        } catch(e) {
+            console.error("Restore failed:", e);
+            Auth.showToast("Click 'Import Database' below and select current_state.json", "error");
+            this.triggerImport();
+        }
+    },
+
+    async recoverFromLocalStorage() {
+        try {
+            const raw = localStorage.getItem('ag-finance-data');
+            if (!raw) {
+                Auth.showToast("No local storage cache found on this device", "error");
+                return;
+            }
+            const data = JSON.parse(raw);
+            if (!data || !data.transactions || data.transactions.length === 0) {
+                Auth.showToast("Local cache has no transactions", "error");
+                return;
+            }
+            if (confirm(`Found ${data.transactions.length} transactions in device cache. Restore now?`)) {
+                const currentAuth = Store.data.auth;
+                Store.data = data;
+                Store.data.auth = currentAuth;
+                Store.sanitizeData();
+                await Store.save();
+                await this.renderAll();
+                Auth.showToast(`Recovered ${Store.data.transactions.length} transactions from device cache!`);
+            }
+        } catch (e) {
+            console.error("Local storage recovery failed:", e);
+            Auth.showToast("Recovery error: " + e.message, "error");
+        }
+    },
+
+    async refreshFromCloud() {
+        Auth.showToast("Pulling latest from Supabase...");
+        try {
+            const status = await Store.loadFromCloud();
+            if (status === 'SUCCESS') {
+                await Store.recalculateBalances();
+                await this.renderAll();
+                Auth.showToast(`Synced with cloud! ${Store.data.transactions.length} transactions loaded.`);
+            } else {
+                Auth.showToast("Cloud sync status: " + status, "error");
+            }
+        } catch(e) {
+            console.error("Cloud refresh failed:", e);
+            Auth.showToast("Cloud pull failed: " + e.message, "error");
+        }
     },
 
     async syncBalances() {
@@ -1338,16 +1417,18 @@ const AppLogic = {
         const endDate = endStr || '';
 
         // Sort ALL transactions chronologically
-        const sortedTxs = [...Store.data.transactions].sort((a, b) => {
-            if (a.date !== b.date) return a.date.localeCompare(b.date);
-            return a.id - b.id;
+        const sortedTxs = [...(Store.data.transactions || [])].filter(Boolean).sort((a, b) => {
+            const dateA = String(a.date || '');
+            const dateB = String(b.date || '');
+            if (dateA !== dateB) return dateA.localeCompare(dateB);
+            return (Number(a.id) || 0) - (Number(b.id) || 0);
         });
 
         // 1. Calculate Opening Balance before startDate
         let periodOpeningBal = Store.round3(item.openingBalance || 0);
         if (startDate) {
             sortedTxs.forEach(t => {
-                if (t.date < startDate) {
+                if (t.date && t.date < startDate) {
                     const effect = Store.getTransactionEffect(t, type, id);
                     if (effect !== 0) {
                         periodOpeningBal = Store.round3(periodOpeningBal + effect);
@@ -1363,8 +1444,8 @@ const AppLogic = {
         const statementRows = [];
 
         sortedTxs.forEach(t => {
-            if (startDate && t.date < startDate) return;
-            if (endDate && t.date > endDate) return;
+            if (startDate && t.date && t.date < startDate) return;
+            if (endDate && t.date && t.date > endDate) return;
 
             const effect = Store.getTransactionEffect(t, type, id);
             if (effect === 0) return;
@@ -1399,8 +1480,10 @@ const AppLogic = {
 
         // 3. Display Sort: Descending (newest date -> newest id first)
         statementRows.sort((a, b) => {
-            if (b.date !== a.date) return b.date.localeCompare(a.date);
-            return b.id - a.id;
+            const dateA = String(a.date || '');
+            const dateB = String(b.date || '');
+            if (dateB !== dateA) return dateB.localeCompare(dateA);
+            return (Number(b.id) || 0) - (Number(a.id) || 0);
         });
 
         let html = `
@@ -1486,9 +1569,10 @@ const AppLogic = {
                                     </tr>
                                 ` : statementRows.map(t => {
             const relatedName = this.getRelatedName(t, type, id);
+            const formattedRowDate = t.date ? t.date.split('-').slice(1).reverse().join('/') : '-';
             return `
                                         <tr onclick="AppLogic.editTx(${t.id})" class="hover:bg-slate-800/60 active:bg-slate-800/80 transition-colors cursor-pointer group">
-                                            <td class="py-2.5 px-2 whitespace-nowrap text-slate-400 text-[10px] font-orbitron group-hover:text-sky-400 transition-colors">${t.date.split('-').slice(1).reverse().join('/')}</td>
+                                            <td class="py-2.5 px-2 whitespace-nowrap text-slate-400 text-[10px] font-orbitron group-hover:text-sky-400 transition-colors">${formattedRowDate}</td>
                                             <td class="py-2.5 px-2 max-w-[130px] sm:max-w-[180px]">
                                                 <div class="text-[10px] text-sky-400 font-bold uppercase truncate">
                                                     ${relatedName}
@@ -1558,9 +1642,11 @@ const AppLogic = {
         let absoluteBaseNetWorth = Store.round3(initialAccountsVal + initialRollingVal);
 
         // 2. Sort ALL transactions
-        const allTxs = [...Store.data.transactions].sort((a, b) => {
-            if (a.date !== b.date) return a.date.localeCompare(b.date);
-            return a.id - b.id;
+        const allTxs = [...(Store.data.transactions || [])].filter(Boolean).sort((a, b) => {
+            const dateA = String(a.date || '');
+            const dateB = String(b.date || '');
+            if (dateA !== dateB) return dateA.localeCompare(dateB);
+            return (Number(a.id) || 0) - (Number(b.id) || 0);
         });
 
         // Utility to calculate impact of a single transaction on Net Worth
@@ -1580,7 +1666,7 @@ const AppLogic = {
         // 3. Calculate Opening Net Worth for the period
         let periodOpeningNetWorth = absoluteBaseNetWorth;
         if (startDate) {
-            allTxs.filter(t => t.date < startDate).forEach(t => {
+            allTxs.filter(t => t.date && t.date < startDate).forEach(t => {
                 periodOpeningNetWorth = Store.round3(periodOpeningNetWorth + getImpact(t));
             });
         }
@@ -1592,8 +1678,8 @@ const AppLogic = {
         const statementRows = [];
 
         allTxs.forEach(t => {
-            if (startDate && t.date < startDate) return;
-            if (endDate && t.date > endDate) return;
+            if (startDate && t.date && t.date < startDate) return;
+            if (endDate && t.date && t.date > endDate) return;
 
             const impact = getImpact(t);
             if (Math.abs(impact) > 0.0001) {
@@ -1602,7 +1688,7 @@ const AppLogic = {
                 else totalNetOut = Store.round3(totalNetOut + Math.abs(impact));
 
                 statementRows.push({
-                    date: t.date,
+                    date: t.date || '',
                     id: t.id,
                     type: t.type,
                     remark: t.remark,
@@ -1614,13 +1700,17 @@ const AppLogic = {
 
         // 5. Display Sort
         statementRows.sort((a, b) => {
-            if (b.date !== a.date) return b.date.localeCompare(a.date);
-            return b.id - a.id;
+            const dateA = String(a.date || '');
+            const dateB = String(b.date || '');
+            if (dateB !== dateA) return dateB.localeCompare(dateA);
+            return (Number(b.id) || 0) - (Number(a.id) || 0);
         });
 
-        const statementHtml = statementRows.map(r => `
+        const statementHtml = statementRows.map(r => {
+            const formattedDate = r.date ? r.date.split('-').reverse().slice(0, 2).join('/') : '-';
+            return `
             <tr class="hover:bg-slate-950/50 transition-colors">
-                <td class="py-3 px-2 whitespace-nowrap text-slate-400 text-[11px] font-orbitron">${r.date.split('-').reverse().slice(0, 2).join('/')}</td>
+                <td class="py-3 px-2 whitespace-nowrap text-slate-400 text-[11px] font-orbitron">${formattedDate}</td>
                 <td class="py-3 px-2">
                     <div class="text-[10px] text-teal-500 font-bold uppercase tracking-tighter mb-0.5">${r.type}</div>
                     <div class="text-[10px] text-slate-300 truncate" title="${r.remark}">${r.remark || '-'}</div>
@@ -1631,7 +1721,8 @@ const AppLogic = {
                     ${r.runningNetWorth}
                 </td>
             </tr>
-        `).join('');
+        `;
+        }).join('');
 
         const html = `
             <div id="modal-content" class="bg-slate-900 w-full max-w-4xl rounded-t-3xl sm:rounded-3xl p-3.5 sm:p-6 lg:p-8 flex flex-col h-[92vh] sm:h-auto sm:max-h-[90vh] shadow-2xl border-t border-slate-800 animate-fade-in">
@@ -1844,16 +1935,18 @@ const AppLogic = {
         const endDate = endStr || '';
 
         // Sort ALL transactions chronologically
-        const sortedTxs = [...Store.data.transactions].sort((a, b) => {
-            if (a.date !== b.date) return a.date.localeCompare(b.date);
-            return a.id - b.id;
+        const sortedTxs = [...(Store.data.transactions || [])].filter(Boolean).sort((a, b) => {
+            const dateA = String(a.date || '');
+            const dateB = String(b.date || '');
+            if (dateA !== dateB) return dateA.localeCompare(dateB);
+            return (Number(a.id) || 0) - (Number(b.id) || 0);
         });
 
         // 1. Calculate Opening Balance before startDate
         let periodOpeningBal = Store.round3(item.openingBalance || 0);
         if (startDate) {
             sortedTxs.forEach(t => {
-                if (t.date < startDate) {
+                if (t.date && t.date < startDate) {
                     const effect = Store.getTransactionEffect(t, type, id);
                     if (effect !== 0) {
                         periodOpeningBal = Store.round3(periodOpeningBal + effect);
@@ -1867,8 +1960,8 @@ const AppLogic = {
         const csvRowsArray = [];
 
         sortedTxs.forEach(t => {
-            if (startDate && t.date < startDate) return;
-            if (endDate && t.date > endDate) return;
+            if (startDate && t.date && t.date < startDate) return;
+            if (endDate && t.date && t.date > endDate) return;
 
             const effect = Store.getTransactionEffect(t, type, id);
             if (effect === 0) return;
@@ -1888,12 +1981,13 @@ const AppLogic = {
             runningBal = Store.round3(runningBal + effect);
 
             const relatedName = this.getRelatedName(t, type, id);
+            const formattedDate = t.date ? t.date.split('-').reverse().join('/') : '-';
 
             csvRowsArray.push({
-                date: t.date,
+                date: t.date || '',
                 id: t.id,
                 cells: [
-                    t.date.split('-').reverse().join('/'),
+                    formattedDate,
                     `\"${relatedName}\"`,
                     `\"${t.remark || ''}\"`,
                     isOut ? amount.toFixed(3) : '0.000',
@@ -1905,8 +1999,10 @@ const AppLogic = {
 
         // APPLY STRICT DESC SORT
         csvRowsArray.sort((a, b) => {
-            if (b.date !== a.date) return b.date.localeCompare(a.date);
-            return b.id - a.id;
+            const dateA = String(a.date || '');
+            const dateB = String(b.date || '');
+            if (dateB !== dateA) return dateB.localeCompare(dateA);
+            return (Number(b.id) || 0) - (Number(a.id) || 0);
         });
 
         let csv = "Date,Related To,Remark,Paid (Out),Recv (In),Balance\n";
@@ -2139,7 +2235,7 @@ const AppLogic = {
             } else if (this.loanSortCriteria === 'amount') {
                 return b.principal - a.principal;
             } else {
-                return a.end_user.localeCompare(b.end_user);
+                return String(a.end_user || '').localeCompare(String(b.end_user || ''));
             }
         });
 
@@ -3032,7 +3128,7 @@ const AppLogic = {
         // Convert to array and sort: Priority first, then Name
         return Object.values(groups).sort((a, b) => {
             if (a.maxPriority !== b.maxPriority) return a.maxPriority - b.maxPriority;
-            return a.name.localeCompare(b.name);
+            return String(a.name || '').localeCompare(String(b.name || ''));
         });
     },
 

