@@ -1110,51 +1110,102 @@ const AppLogic = {
         `).join('');
     },
 
-    exportData() {
+    exportStructuredBackup() {
         try {
-            const dataStr = JSON.stringify(Store.data, null, 2);
+            const dataToExport = {
+                metadata: {
+                    version: "1.0",
+                    exportDate: new Date().toISOString(),
+                    schema: ["transactions", "accounts", "ledgers", "ledgerGroups", "users"],
+                    counts: {
+                        transactions: Store.data.transactions?.length || 0,
+                        accounts: Store.data.accounts?.length || 0,
+                        ledgers: Store.data.ledgers?.length || 0
+                    }
+                },
+                data: {
+                    transactions: Store.data.transactions || [],
+                    accounts: Store.data.accounts || [],
+                    ledgers: Store.data.ledgers || [],
+                    ledgerGroups: Store.data.ledgerGroups || [],
+                    users: (Store.data.users || []).map(u => ({ ...u, password: undefined })) // Exclude passwords
+                }
+            };
+            
+            const dataStr = JSON.stringify(dataToExport, null, 2);
             const blob = new Blob([dataStr], { type: 'application/json' });
             const url = URL.createObjectURL(blob);
             const link = document.createElement('a');
-            const dateStr = new Date().toISOString().split('T')[0];
+            
+            const now = new Date();
+            const dateStr = now.toISOString().split('T')[0];
+            const timeStr = now.toTimeString().split(' ')[0].replace(/:/g, '-');
+            
             link.href = url;
-            link.download = `antigravity_backup_${dateStr}.json`;
+            link.download = `cash_tracker_backup_${dateStr}_${timeStr}.json`;
             document.body.appendChild(link);
             link.click();
             document.body.removeChild(link);
-            Auth.showToast("Backup downloaded!");
+            Auth.showToast(`Backup exported successfully! (${dataToExport.metadata.counts.transactions} records)`);
         } catch (e) {
-            Auth.showToast("Export failed", "error");
+            console.error(e);
+            Auth.showToast("Export failed: " + e.message, "error");
         }
     },
 
-    triggerImport() {
+    triggerStructuredImport() {
         document.getElementById('import-input').click();
     },
 
-    async importData(event) {
+    async processStructuredImport(event) {
         const file = event.target.files[0];
         if (!file) return;
 
         const reader = new FileReader();
         reader.onload = async (e) => {
             try {
-                const importedData = JSON.parse(e.target.result);
-
-                // Basic validation
-                if (!importedData.transactions && !importedData.accounts && !importedData.ledgers) {
-                    throw new Error("Invalid format: Missing essential database keys");
+                const importedPayload = JSON.parse(e.target.result);
+                
+                // Validate format
+                if (!importedPayload.metadata || !importedPayload.data) {
+                    throw new Error("Invalid format: Not a structured Cash Tracker backup");
                 }
-
-                if (confirm(`Restore ${importedData.transactions?.length || 0} transactions from "${file.name}"?`)) {
+                
+                const { transactions, accounts, ledgers } = importedPayload.data;
+                const txCount = transactions?.length || 0;
+                
+                // Prompt user for mode
+                const mode = confirm(`Found ${txCount} transactions in backup (Dated: ${new Date(importedPayload.metadata.exportDate).toLocaleDateString()}).\n\nClick OK to MERGE/UPSERT (Safely add missing records).\nClick CANCEL to completely REPLACE your database (Destructive).`);
+                
+                if (mode) {
+                    // Merge Mode (Upsert by ID)
+                    const mergeArray = (source, target) => {
+                        const targetMap = new Map(target.map(i => [i.id, i]));
+                        source.forEach(i => targetMap.set(i.id, i));
+                        return Array.from(targetMap.values());
+                    };
+                    
+                    Store.data.transactions = mergeArray(transactions || [], Store.data.transactions);
+                    Store.data.accounts = mergeArray(accounts || [], Store.data.accounts);
+                    Store.data.ledgers = mergeArray(ledgers || [], Store.data.ledgers);
+                    if (importedPayload.data.ledgerGroups) Store.data.ledgerGroups = mergeArray(importedPayload.data.ledgerGroups, Store.data.ledgerGroups);
+                    
+                } else {
+                    // Replace Mode
+                    if (!confirm(`WARNING: This will delete your entire database and replace it with this backup. Are you absolutely sure?`)) {
+                        Auth.showToast("Import cancelled");
+                        return;
+                    }
                     const currentAuth = Store.data.auth;
-                    Store.data = importedData;
+                    Store.data = importedPayload.data;
                     Store.data.auth = currentAuth;
-                    Store.sanitizeData();
-                    await Store.save();
-                    await this.renderAll();
-                    Auth.showToast(`Database restored: ${Store.data.transactions.length} transactions loaded!`);
                 }
+                
+                Store.sanitizeData();
+                await Store.save();
+                await this.renderAll();
+                Auth.showToast(`Import completed successfully! Total transactions: ${Store.data.transactions.length}`);
+                
             } catch (err) {
                 console.error("Import error:", err);
                 Auth.showToast("Invalid backup file: " + err.message, "error");
@@ -1164,51 +1215,152 @@ const AppLogic = {
         event.target.value = ''; // Reset input
     },
 
-    async restoreFromSnapshot() {
-        if (!confirm("Restore your complete 2,461-transaction database from current_state.json?")) return;
-        Auth.showToast("Restoring from snapshot...");
-        try {
-            const response = await fetch('./current_state.json');
-            if (!response.ok) throw new Error("Could not fetch current_state.json file");
-            const data = await response.json();
-            const currentAuth = Store.data.auth;
-            Store.data = data;
-            Store.data.auth = currentAuth;
-            Store.sanitizeData();
-            await Store.save();
-            await this.renderAll();
-            Auth.showToast(`Restored successfully! ${Store.data.transactions.length} transactions loaded.`);
-        } catch(e) {
-            console.error("Restore failed:", e);
-            Auth.showToast("Click 'Import Database' below and select current_state.json", "error");
-            this.triggerImport();
-        }
-    },
+    async exportSQLServerBackup() {
+        if (this._isExportingBackup) return;
+        this._isExportingBackup = true;
+        const btnStatus = document.getElementById('sql-export-status');
+        if (btnStatus) btnStatus.innerText = "Generating ZIP, please wait...";
+        Auth.showToast("Compiling SQL Server 2008 R2 Backup Package...");
 
-    async recoverFromLocalStorage() {
         try {
-            const raw = localStorage.getItem('ag-finance-data');
-            if (!raw) {
-                Auth.showToast("No local storage cache found on this device", "error");
-                return;
+            if (typeof JSZip === 'undefined') {
+                throw new Error("JSZip library not loaded.");
             }
-            const data = JSON.parse(raw);
-            if (!data || !data.transactions || data.transactions.length === 0) {
-                Auth.showToast("Local cache has no transactions", "error");
-                return;
-            }
-            if (confirm(`Found ${data.transactions.length} transactions in device cache. Restore now?`)) {
-                const currentAuth = Store.data.auth;
-                Store.data = data;
-                Store.data.auth = currentAuth;
-                Store.sanitizeData();
-                await Store.save();
-                await this.renderAll();
-                Auth.showToast(`Recovered ${Store.data.transactions.length} transactions from device cache!`);
-            }
+
+            const zip = new JSZip();
+            const now = new Date();
+            const dateStr = now.toISOString().split('T')[0];
+            const timeStr = now.toTimeString().split(' ')[0].replace(/:/g, '-');
+            const safeEscape = (str) => {
+                if (!str) return 'NULL';
+                return "N'" + String(str).replace(/'/g, "''") + "'";
+            };
+
+            const transactions = Store.data.transactions || [];
+            const accounts = Store.data.accounts || [];
+            const ledgers = Store.data.ledgers || [];
+            const ledgerGroups = Store.data.ledgerGroups || [];
+            const users = (Store.data.users || []).map(u => ({ ...u, password: undefined }));
+
+            // 1. Manifest
+            const manifest = {
+                application: "Cash Tracker",
+                exportDate: now.toISOString(),
+                version: "1.0",
+                dataFormatVersion: "1.0",
+                recordCounts: {
+                    transactions: transactions.length,
+                    accounts: accounts.length,
+                    ledgers: ledgers.length,
+                    ledgerGroups: ledgerGroups.length,
+                    users: users.length
+                }
+            };
+            zip.file("manifest.json", JSON.stringify(manifest, null, 2));
+
+            // 2. JSON files
+            zip.file("transactions.json", JSON.stringify(transactions, null, 2));
+            zip.file("accounts.json", JSON.stringify(accounts, null, 2));
+            zip.file("ledgers.json", JSON.stringify(ledgers, null, 2));
+            zip.file("ledgerGroups.json", JSON.stringify(ledgerGroups, null, 2));
+            zip.file("users.json", JSON.stringify(users, null, 2));
+            zip.file("settings.json", JSON.stringify({ theme: 'dark', lastModified: Store.data.lastModified }, null, 2));
+
+            // 3. SQL 2008 R2 Import Script
+            let sql = `-- Cash Tracker SQL Server 2008 R2 Import Script\n`;
+            sql += `-- Export Date: ${now.toISOString()}\n\n`;
+            
+            sql += `-- Drop existing tables if they exist to prevent Msg 2714 errors\n`;
+            sql += `IF OBJECT_ID('dbo.Transactions', 'U') IS NOT NULL DROP TABLE dbo.Transactions;\n`;
+            sql += `IF OBJECT_ID('dbo.Users', 'U') IS NOT NULL DROP TABLE dbo.Users;\n`;
+            sql += `IF OBJECT_ID('dbo.Ledgers', 'U') IS NOT NULL DROP TABLE dbo.Ledgers;\n`;
+            sql += `IF OBJECT_ID('dbo.Accounts', 'U') IS NOT NULL DROP TABLE dbo.Accounts;\n`;
+            sql += `IF OBJECT_ID('dbo.LedgerGroups', 'U') IS NOT NULL DROP TABLE dbo.LedgerGroups;\n\n`;
+
+            sql += `BEGIN TRANSACTION;\n\n`;
+
+            sql += `CREATE TABLE [LedgerGroups] (\n  [id] BIGINT PRIMARY KEY,\n  [name] NVARCHAR(100),\n  [type] NVARCHAR(50)\n);\n\n`;
+            sql += `CREATE TABLE [Accounts] (\n  [id] BIGINT PRIMARY KEY,\n  [name] NVARCHAR(100),\n  [openingBalance] DECIMAL(18,3)\n);\n\n`;
+            sql += `CREATE TABLE [Ledgers] (\n  [id] BIGINT PRIMARY KEY,\n  [name] NVARCHAR(100),\n  [groupId] BIGINT,\n  [openingBalance] DECIMAL(18,3)\n);\n\n`;
+            sql += `CREATE TABLE [Users] (\n  [id] BIGINT PRIMARY KEY,\n  [username] NVARCHAR(100),\n  [role] NVARCHAR(50),\n  [enabled] BIT\n);\n\n`;
+            sql += `CREATE TABLE [Transactions] (\n  [id] BIGINT PRIMARY KEY,\n  [date] DATETIME,\n  [type] NVARCHAR(50),\n  [amount] DECIMAL(18,3),\n  [accountId] BIGINT,\n  [ledgerId] BIGINT,\n  [toId] BIGINT,\n  [fromType] NVARCHAR(50),\n  [toType] NVARCHAR(50),\n  [remark] NVARCHAR(500)\n);\n\n`;
+
+            const generateInserts = (table, data, cols, rowMapper) => {
+                if (data.length === 0) return '';
+                let result = '';
+                const batchSize = 1000;
+                for (let i = 0; i < data.length; i += batchSize) {
+                    const batch = data.slice(i, i + batchSize);
+                    result += `INSERT INTO [${table}] (${cols.join(', ')}) VALUES\n`;
+                    result += batch.map(row => `(${rowMapper(row).join(', ')})`).join(',\n') + ';\n';
+                }
+                return result + '\n';
+            };
+
+            sql += generateInserts('LedgerGroups', ledgerGroups, ['id', 'name', 'type'], (g) => [g.id, safeEscape(g.name), safeEscape(g.type)]);
+            sql += generateInserts('Accounts', accounts, ['id', 'name', 'openingBalance'], (a) => [a.id, safeEscape(a.name), a.openingBalance || 0]);
+            sql += generateInserts('Ledgers', ledgers, ['id', 'name', 'groupId', 'openingBalance'], (l) => [l.id, safeEscape(l.name), l.groupId || 'NULL', l.openingBalance || 0]);
+            sql += generateInserts('Users', users, ['id', 'username', 'role', 'enabled'], (u) => [u.id, safeEscape(u.username), safeEscape(u.role), u.enabled ? 1 : 0]);
+            sql += generateInserts('Transactions', transactions, 
+                ['id', 'date', 'type', 'amount', 'accountId', 'ledgerId', 'toId', 'fromType', 'toType', 'remark'], 
+                (t) => [
+                    t.id, 
+                    t.date ? `'${t.date} 00:00:00'` : 'NULL', 
+                    safeEscape(t.type), 
+                    parseFloat(t.amount) || 0, 
+                    t.accountId || 'NULL', 
+                    t.ledgerId || 'NULL', 
+                    t.toId || 'NULL', 
+                    safeEscape(t.fromType), 
+                    safeEscape(t.toType), 
+                    safeEscape(t.remark)
+                ]
+            );
+
+            sql += `\nCOMMIT TRANSACTION;\n`;
+            sql += `PRINT 'Import completed successfully.';\n`;
+            zip.file("import_sql_server_2008_r2.sql", sql);
+
+            // 4. Restore Instructions
+            let instructions = `CASH TRACKER - SQL SERVER 2008 R2 RESTORE INSTRUCTIONS\n`;
+            instructions += `========================================================\n\n`;
+            instructions += `1. Extract this ZIP file to a local folder (e.g., C:\\Temp\\CashTrackerBackup)\n`;
+            instructions += `2. Open SQL Server Management Studio (SSMS 2008 R2 or newer) and connect to your instance.\n`;
+            instructions += `3. Create a new blank database named 'Cash_tracker_Renju' (or your preferred name).\n`;
+            instructions += `4. Open the 'import_sql_server_2008_r2.sql' file in SSMS.\n`;
+            instructions += `5. Make sure the newly created database is selected in the Available Databases dropdown.\n`;
+            instructions += `6. Click 'Execute' (F5) to run the script. It will create the tables and import all records.\n`;
+            instructions += `7. Verify the row counts in SSMS match the recordCounts listed in manifest.json.\n\n`;
+            instructions += `CREATING A NATIVE .BAK FILE:\n`;
+            instructions += `----------------------------\n`;
+            instructions += `After the data is imported, you must manually create a native SQL Server .bak file from SSMS.\n`;
+            instructions += `Ensure the backup folder (e.g. D:\\SQLBackups\\) exists and the SQL Server service account has write permissions to it.\n\n`;
+            instructions += `Run this command in SSMS:\n\n`;
+            instructions += `BACKUP DATABASE [Cash_tracker_Renju]\n`;
+            instructions += `TO DISK = N'D:\\SQLBackups\\Cash_tracker_Renju_full.bak'\n`;
+            instructions += `WITH COPY_ONLY, INIT, CHECKSUM, STATS = 10;\n\n`;
+            instructions += `To restore this native .bak file later, open SSMS, right-click 'Databases' -> 'Restore Database', select 'Device', and locate your .bak file.\n`;
+
+            zip.file("RESTORE_INSTRUCTIONS.txt", instructions);
+
+            // 5. Generate and Download
+            const content = await zip.generateAsync({ type: "blob" });
+            const link = document.createElement('a');
+            link.href = URL.createObjectURL(content);
+            link.download = `Cash_Tracker_SQL2008R2_Backup_${dateStr}_${timeStr}.zip`;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            
+            Auth.showToast(`SQL Backup Package generated successfully!`);
+            if (btnStatus) btnStatus.innerText = `Last Backup: ${new Date().toLocaleTimeString()}`;
+            
         } catch (e) {
-            console.error("Local storage recovery failed:", e);
-            Auth.showToast("Recovery error: " + e.message, "error");
+            console.error(e);
+            Auth.showToast("Failed to generate backup: " + e.message, "error");
+            if (btnStatus) btnStatus.innerText = `Error: Backup failed.`;
+        } finally {
+            this._isExportingBackup = false;
         }
     },
 
@@ -1409,6 +1561,49 @@ const AppLogic = {
         return name;
     },
 
+    getLedgerMovement(tx, targetId, entityType) {
+        const amount = Math.abs(parseFloat(tx.amount) || 0);
+        if (amount === 0) return { direction: 'NONE', amount: 0, signedAmount: 0 };
+
+        const idStr = String(targetId);
+        
+        let isSource = false;
+        let isDest = false;
+
+        // Resolve types dynamically if not explicitly stored
+        const fromType = tx.fromType || Store.resolveEntityType(tx.accountId);
+        const toType = tx.toType || Store.resolveEntityType(tx.toId);
+
+        if (tx.type === 'expense') {
+            // Account paid OUT → source. Ledger consumed money → destination (IN)
+            if (String(tx.accountId) === idStr && entityType === fromType) isSource = true;
+            if (String(tx.ledgerId) === idStr && entityType === 'ledger') isDest = true;
+        } else if (tx.type === 'income') {
+            // Ledger pays money → source (OUT). Account receives money → destination (IN)
+            if (String(tx.ledgerId) === idStr && entityType === 'ledger') isSource = true;
+            if (String(tx.accountId) === idStr && entityType === 'account') isDest = true;
+        } else if (tx.type === 'contra') {
+            if (String(tx.accountId) === idStr && entityType === fromType) isSource = true;
+            if (String(tx.toId) === idStr && entityType === toType) isDest = true;
+        } else if (tx.type === 'passthrough') {
+            // Both the via-ledger and expense-ledger are being charged OUT
+            if (String(tx.accountId) === idStr && entityType === fromType) isSource = true;
+            if (String(tx.ledgerId) === idStr && entityType === 'ledger') isSource = true;
+        }
+
+        if (isSource && isDest) {
+            return { direction: 'NONE', amount: 0, signedAmount: 0 };
+        }
+        if (isSource) {
+            return { direction: 'OUT', amount: amount, signedAmount: -amount };
+        }
+        if (isDest) {
+            return { direction: 'IN', amount: amount, signedAmount: amount };
+        }
+
+        return { direction: 'NONE', amount: 0, signedAmount: 0 };
+    },
+
     showStatement(type, id, startStr, endStr, advancedFilterId) {
         const item = Store.data[type + 's'].find(i => i.id == id);
         if (!item) return;
@@ -1429,9 +1624,9 @@ const AppLogic = {
         if (startDate) {
             sortedTxs.forEach(t => {
                 if (t.date && t.date < startDate) {
-                    const effect = Store.getTransactionEffect(t, type, id);
-                    if (effect !== 0) {
-                        periodOpeningBal = Store.round3(periodOpeningBal + effect);
+                    const movement = AppLogic.getLedgerMovement(t, id, type);
+                    if (movement.direction !== 'NONE') {
+                        periodOpeningBal = Store.round3(periodOpeningBal + movement.signedAmount);
                     }
                 }
             });
@@ -1447,8 +1642,8 @@ const AppLogic = {
             if (startDate && t.date && t.date < startDate) return;
             if (endDate && t.date && t.date > endDate) return;
 
-            const effect = Store.getTransactionEffect(t, type, id);
-            if (effect === 0) return;
+            const movement = AppLogic.getLedgerMovement(t, id, type);
+            if (movement.direction === 'NONE') return;
 
             if (advancedFilterId) {
                 const isFilterAcc = advancedFilterId.startsWith('acc_');
@@ -1459,9 +1654,10 @@ const AppLogic = {
                 }
             }
 
-            const isIn = effect > 0;
-            const isOut = effect < 0;
-            const amount = Math.abs(effect);
+            const isIn = movement.direction === 'IN';
+            const isOut = movement.direction === 'OUT';
+            const amount = movement.amount;
+            const effect = movement.signedAmount;
 
             if (isIn) totalIn = Store.round3(totalIn + amount);
             if (isOut) totalOut = Store.round3(totalOut + amount);
@@ -1582,18 +1778,17 @@ const AppLogic = {
                                             <td class="py-2.5 px-2 text-rose-400 font-orbitron text-[11px] font-medium text-right">${t.isOut ? t.amount.toFixed(3) : '-'}</td>
                                             <td class="py-2.5 px-2 text-emerald-400 font-orbitron text-[11px] font-medium text-right">${t.isIn ? t.amount.toFixed(3) : '-'}</td>
                                             <td class="py-2.5 px-2 text-right font-orbitron text-[11px] font-bold ${t.currentBal < 0 ? 'text-rose-400' : 'text-sky-400'}">
-                                                ${t.currentBal < 0 ? '' : '+'}${t.currentBal.toFixed(3)}
+                                                ${t.currentBal < 0 ? '-' : '+'}${Math.abs(t.currentBal).toFixed(3)}
                                             </td>
                                         </tr>
                                     `;
         }).join('')}
 
-                                <!-- Opening Balance Row -->
                                 <tr class="bg-slate-950/60">
                                     <td class="py-2.5 px-2 text-slate-500 font-orbitron text-[10px]">${startDate ? startDate.split('-').slice(1).reverse().join('/') : 'Opening'}</td>
                                     <td class="py-2.5 px-2 text-[10px] text-slate-400 font-bold uppercase tracking-tight" colspan="3">Opening Balance (B/F)</td>
-                                    <td class="py-2.5 px-2 text-right font-orbitron text-xs text-slate-400">
-                                        ${periodOpeningBal >= 0 ? '+' : ''}${periodOpeningBal.toFixed(3)}
+                                    <td class="py-2.5 px-2 text-right font-orbitron text-xs ${periodOpeningBal < 0 ? 'text-rose-400' : 'text-sky-400'}">
+                                        ${periodOpeningBal < 0 ? '-' : '+'}${Math.abs(periodOpeningBal).toFixed(3)}
                                     </td>
                                 </tr>
                             </tbody>
@@ -1613,7 +1808,7 @@ const AppLogic = {
                         <div class="bg-slate-950/50 p-2 rounded-xl border border-sky-500/20 text-center">
                             <div class="text-[7px] text-sky-400/80 uppercase tracking-widest">End Balance</div>
                             <div class="text-xs font-bold font-orbitron ${runningBal < 0 ? 'text-rose-400' : 'text-sky-400'} truncate">
-                                ${runningBal < 0 ? '' : '+'}${runningBal.toFixed(3)}
+                                ${runningBal < 0 ? '-' : '+'}${Math.abs(runningBal).toFixed(3)}
                             </div>
                         </div>
                     </div>

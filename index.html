@@ -81,24 +81,6 @@
                 </button>
             </div>
 
-            <!-- Device Cache Recovery Check -->
-            <div class="mt-4">
-                <button onclick="
-                    try {
-                        const d = JSON.parse(localStorage.getItem('ag-finance-data') || '{}');
-                        const count = d?.transactions?.length || 0;
-                        const mod = d?.lastModified || 'Never';
-                        document.getElementById('cache-result').innerHTML = count > 0
-                            ? '<span style=\'color:#34d399\'>✅ Found ' + count + ' transactions in this device!<br>Last saved: ' + mod + '<br><br>Log in then go Admin → Recover from Device Cache</span>'
-                            : '<span style=\'color:#f87171\'>❌ No transactions found in this device cache.<br>Last modified: ' + mod + '</span>';
-                    } catch(e) {
-                        document.getElementById('cache-result').innerHTML = '<span style=\'color:#f87171\'>Error: ' + e.message + '</span>';
-                    }
-                " class="w-full text-xs text-amber-400 border border-amber-500/30 bg-amber-500/10 rounded-xl py-2 px-4 hover:bg-amber-500/20 transition-all">
-                    🔍 Check This Device for Cached Data
-                </button>
-                <div id="cache-result" class="mt-2 text-xs text-center leading-relaxed px-2"></div>
-            </div>
         </div>
     </div>
 
@@ -337,59 +319,39 @@
                         <p class="text-sm text-slate-500 mb-6">Backup your entire financial database to a file or
                             restore it on a new device.</p>
                         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <button onclick="window.AppLogic.exportData()"
+                            <button onclick="window.AppLogic.exportStructuredBackup()"
                                 class="flex items-center justify-center space-x-3 bg-slate-800 hover:bg-slate-700 text-slate-100 px-6 py-4 rounded-2xl transition-all border border-slate-700 shadow-xl group">
-                                <i
-                                    class="fas fa-file-export text-sky-400 group-hover:scale-110 transition-transform"></i>
+                                <i class="fas fa-file-export text-sky-400 group-hover:scale-110 transition-transform"></i>
                                 <div class="text-left">
-                                    <div class="font-bold">Export Database</div>
-                                    <div class="text-[10px] text-slate-400 uppercase tracking-widest font-orbitron">
-                                        Download JSON</div>
+                                    <div class="font-bold">Export Backup</div>
+                                    <div class="text-[10px] text-slate-400 uppercase tracking-widest font-orbitron">Download Secure JSON</div>
                                 </div>
                             </button>
-                            <button onclick="window.AppLogic.triggerImport()"
+                            <button onclick="window.AppLogic.triggerStructuredImport()"
                                 class="flex items-center justify-center space-x-3 bg-slate-800 hover:bg-slate-700 text-slate-100 px-6 py-4 rounded-2xl transition-all border border-slate-700 shadow-xl group">
-                                <i
-                                    class="fas fa-file-import text-emerald-400 group-hover:scale-110 transition-transform"></i>
+                                <i class="fas fa-file-import text-emerald-400 group-hover:scale-110 transition-transform"></i>
                                 <div class="text-left">
-                                    <div class="font-bold">Import Database</div>
-                                    <div class="text-[10px] text-slate-400 uppercase tracking-widest font-orbitron">
-                                        Upload JSON File</div>
-                                </div>
-                            </button>
-                            <button onclick="window.AppLogic.restoreFromSnapshot()"
-                                class="flex items-center justify-center space-x-3 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 px-6 py-4 rounded-2xl transition-all border border-emerald-500/20 shadow-xl group">
-                                <i
-                                    class="fas fa-history text-emerald-400 group-hover:scale-110 transition-transform"></i>
-                                <div class="text-left">
-                                    <div class="font-bold">1-Click Restore (current_state.json)</div>
-                                    <div class="text-[10px] text-emerald-400/70 uppercase tracking-widest font-orbitron">
-                                        Restore 2,461 historical records</div>
-                                </div>
-                            </button>
-                            <button onclick="window.AppLogic.recoverFromLocalStorage()"
-                                class="flex items-center justify-center space-x-3 bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 px-6 py-4 rounded-2xl transition-all border border-amber-500/20 shadow-xl group">
-                                <i
-                                    class="fas fa-hdd text-amber-400 group-hover:scale-110 transition-transform"></i>
-                                <div class="text-left">
-                                    <div class="font-bold">Recover from Device Cache</div>
-                                    <div class="text-[10px] text-amber-400/70 uppercase tracking-widest font-orbitron">
-                                        Restore from this phone/PC's browser</div>
+                                    <div class="font-bold">Import Backup</div>
+                                    <div class="text-[10px] text-slate-400 uppercase tracking-widest font-orbitron">Upload & Merge/Replace</div>
                                 </div>
                             </button>
                         </div>
                         <input type="file" id="import-input" class="hidden" accept=".json"
-                            onchange="window.AppLogic.importData(event)">
+                            onchange="window.AppLogic.processStructuredImport(event)">
 
-                        <div class="mt-6 pt-6 border-t border-slate-800">
-                            <h4 class="text-sm font-bold text-slate-400 uppercase tracking-widest mb-4">Cloud Sync</h4>
-                            <button onclick="window.AppLogic.refreshFromCloud()"
-                                class="w-full flex items-center justify-center space-x-3 bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-400 px-6 py-4 rounded-2xl transition-all border border-indigo-500/20 shadow-xl group">
-                                <i class="fas fa-cloud-download-alt group-hover:scale-110 transition-transform"></i>
-                                <div class="text-left">
-                                    <div class="font-bold">Refresh from Cloud</div>
-                                    <div class="text-[10px] uppercase tracking-widest font-orbitron text-indigo-400/70">
-                                        Pull latest data from Supabase</div>
+                        <div class="mt-8 pt-6 border-t border-slate-800">
+                            <h4 class="text-sm font-bold text-slate-300 mb-2">SQL Server Integration</h4>
+                            <p class="text-xs text-slate-500 mb-4">Export all data as a ZIP package ready for manual SQL Server 2008 R2 import.</p>
+                            
+                            <button onclick="window.AppLogic.exportSQLServerBackup()" id="sql-backup-btn"
+                                class="w-full flex items-center justify-center space-x-3 bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-400 px-6 py-4 rounded-2xl transition-all border border-indigo-500/20 shadow-xl group relative overflow-hidden">
+                                <div class="absolute inset-0 bg-indigo-400/20 translate-y-full group-hover:translate-y-0 transition-transform duration-300"></div>
+                                <i class="fas fa-database group-hover:scale-110 transition-transform relative z-10"></i>
+                                <div class="text-left relative z-10">
+                                    <div class="font-bold">Download SQL Server 2008 R2 Backup Package</div>
+                                    <div class="text-[10px] uppercase tracking-widest font-orbitron text-indigo-400/70" id="sql-export-status">
+                                        Generates ZIP with .sql script and JSON
+                                    </div>
                                 </div>
                             </button>
                         </div>
@@ -551,10 +513,13 @@
     <div id="toast-container" class="fixed top-6 left-1/2 -translate-x-1/2 z-[4000] space-y-2 pointer-events-none">
     </div>
 
+    <!-- External Libraries -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script src="store.js?v=23"></script>
-    <script src="logic.js?v=23"></script>
-    <script src="auth.js?v=23"></script>
+    
+    <script src="store.js?v=25"></script>
+    <script src="logic.js?v=25"></script>
+    <script src="auth.js?v=25"></script>
     <script>
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {

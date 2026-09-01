@@ -1,4 +1,4 @@
-const CACHE_NAME = 'ag-finance-v13'; // Bumped version
+const CACHE_NAME = 'ag-finance-v15'; // Bumped version
 const ASSETS = [
   './',
   './index.html',
