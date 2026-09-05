@@ -1562,46 +1562,10 @@ const AppLogic = {
     },
 
     getLedgerMovement(tx, targetId, entityType) {
-        const amount = Math.abs(parseFloat(tx.amount) || 0);
-        if (amount === 0) return { direction: 'NONE', amount: 0, signedAmount: 0 };
-
-        const idStr = String(targetId);
-        
-        let isSource = false;
-        let isDest = false;
-
-        // Resolve types dynamically if not explicitly stored
-        const fromType = tx.fromType || Store.resolveEntityType(tx.accountId);
-        const toType = tx.toType || Store.resolveEntityType(tx.toId);
-
-        if (tx.type === 'expense') {
-            // Account paid OUT → source. Ledger consumed money → destination (IN)
-            if (String(tx.accountId) === idStr && entityType === fromType) isSource = true;
-            if (String(tx.ledgerId) === idStr && entityType === 'ledger') isDest = true;
-        } else if (tx.type === 'income') {
-            // Ledger pays money → source (OUT). Account receives money → destination (IN)
-            if (String(tx.ledgerId) === idStr && entityType === 'ledger') isSource = true;
-            if (String(tx.accountId) === idStr && entityType === 'account') isDest = true;
-        } else if (tx.type === 'contra') {
-            if (String(tx.accountId) === idStr && entityType === fromType) isSource = true;
-            if (String(tx.toId) === idStr && entityType === toType) isDest = true;
-        } else if (tx.type === 'passthrough') {
-            // Both the via-ledger and expense-ledger are being charged OUT
-            if (String(tx.accountId) === idStr && entityType === fromType) isSource = true;
-            if (String(tx.ledgerId) === idStr && entityType === 'ledger') isSource = true;
-        }
-
-        if (isSource && isDest) {
-            return { direction: 'NONE', amount: 0, signedAmount: 0 };
-        }
-        if (isSource) {
-            return { direction: 'OUT', amount: amount, signedAmount: -amount };
-        }
-        if (isDest) {
-            return { direction: 'IN', amount: amount, signedAmount: amount };
-        }
-
-        return { direction: 'NONE', amount: 0, signedAmount: 0 };
+        const effect = Store.getTransactionEffect(tx, entityType, targetId);
+        if (effect === 0) return { direction: 'NONE', amount: 0, signedAmount: 0 };
+        if (effect > 0) return { direction: 'IN', amount: effect, signedAmount: effect };
+        return { direction: 'OUT', amount: Math.abs(effect), signedAmount: effect };
     },
 
     showStatement(type, id, startStr, endStr, advancedFilterId) {
